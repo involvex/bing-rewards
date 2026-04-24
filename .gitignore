@@ -60,3 +60,4 @@ venv.bak/
 
 # BE GONE MAC-OS!
 .DS_Store
+*.log
