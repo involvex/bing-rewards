@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from collections.abc import Iterator
 
-if os.name == 'posix':
+if os.name == "posix":
     import signal
 
 
@@ -30,6 +30,88 @@ from pynput import keyboard
 from pynput.keyboard import Key
 
 from bing_rewards import options as app_options
+
+
+def _get_search_delay(options: Namespace) -> float:
+    """Extract search delay from options."""
+    match options.search_delay:
+        case int() as x:
+            return float(x)
+        case float() as x:
+            return float(x)
+        case [float() as x]:
+            return float(x)
+        case [float() as min_s, float() as max_s]:
+            return random.uniform(min_s, max_s)
+        case [int() as min_s, int() as max_s]:
+            return random.uniform(min_s, max_s)
+        case other:
+            raise ValueError(f'Invalid configuration format: "search_delay": {other!r}')
+
+
+def _create_chrome_driver(options: Namespace, agent: str):
+    """Create and return a Chrome WebDriver for headless mode."""
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+
+    chrome_options = ChromeOptions()
+    chrome_options.add_argument(f"--user-agent={agent}")
+    if getattr(options, "headless", False):
+        chrome_options.headless = True
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+
+    return webdriver.Chrome(options=chrome_options)
+
+
+def search_headless(
+    count: int,
+    words_gen: Iterator[str],
+    agent: str,
+    options: Namespace,
+) -> None:
+    """Perform searches in headless mode using Selenium WebDriver."""
+    try:
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+    except ImportError:
+        print(
+            "Selenium is required for headless mode. "
+            "Install with: pip install bing-rewards[headless]"
+        )
+        sys.exit(1)
+
+    driver = _create_chrome_driver(options, agent)
+    wait = WebDriverWait(driver, 10)
+    try:
+        for i in range(count):
+            query = next(words_gen)
+            print(f"Search {i + 1}: {query}")
+
+            if not options.dryrun:
+                driver.get("https://www.bing.com")
+                time.sleep(options.load_delay)
+
+                search_box = wait.until(
+                    EC.presence_of_element_located((By.ID, "sb_form_q"))
+                )
+                search_box.clear()
+                search_box.send_keys(query)
+                search_box.send_keys(Keys.RETURN)
+
+                time.sleep(_get_search_delay(options))
+            else:
+                time.sleep(_get_search_delay(options))
+
+        if not options.no_exit:
+            driver.quit()
+
+    except Exception as e:
+        print(f"Headless search error: {e}")
+        driver.quit()
+        sys.exit(1)
 
 
 def word_generator() -> Iterator[str]:
@@ -45,20 +127,20 @@ def word_generator() -> Iterator[str]:
     Raises:
         OSError: If there are issues accessing or reading the file.
     """
-    word_data = resources.files('bing_rewards').joinpath('data', 'keywords.txt')
+    word_data = resources.files("bing_rewards").joinpath("data", "keywords.txt")
 
     try:
         while True:
             with (
                 resources.as_file(word_data) as p,
-                p.open(mode='r', encoding='utf-8') as fh,
+                p.open(mode="r", encoding="utf-8") as fh,
             ):
                 # Get the file size of the Keywords file
                 fh.seek(0, io.SEEK_END)
                 size = fh.tell()
 
                 if size == 0:
-                    raise ValueError('Keywords file is empty')
+                    raise ValueError("Keywords file is empty")
 
                 # Start at a random position in the stream
                 fh.seek(random.randint(0, size - 1), io.SEEK_SET)
@@ -79,14 +161,16 @@ def word_generator() -> Iterator[str]:
                     if stripped_line:
                         yield stripped_line
     except OSError as e:
-        print(f'Error accessing keywords file: {e}')
+        print(f"Error accessing keywords file: {e}")
         raise
     except Exception as e:
-        print(f'Unexpected error in word generation: {e}')
+        print(f"Unexpected error in word generation: {e}")
         raise
 
 
-def browser_cmd(exe: Path, agent: str, profile: str = '') -> list[str]:
+def browser_cmd(
+    exe: Path, agent: str, profile: str = "", headless: bool = False
+) -> list[str]:
     """Validate command to open Google Chrome with user-agent `agent`."""
     exe = Path(exe)
     if exe.is_file() and exe.exists():
@@ -96,18 +180,24 @@ def browser_cmd(exe: Path, agent: str, profile: str = '') -> list[str]:
     else:
         print(
             f'Command "{exe}" could not be found.\n'
-            'Make sure it is available on PATH, '
-            'or use the --exe flag to give an absolute path.'
+            "Make sure it is available on PATH, "
+            "or use the --exe flag to give an absolute path."
         )
         sys.exit(1)
 
-    cmd.extend(['--new-window', f'--user-agent="{agent}"'])
+    cmd.extend(["--new-window", f'--user-agent="{agent}"'])
     # Switch to non default profile if supplied with valid string
     # NO CHECKING IS DONE if the profile exists
     if profile:
-        cmd.extend([f'--profile-directory={profile}'])
-    if os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
-        cmd.append('--ozone-platform=x11')
+        cmd.extend([f"--profile-directory={profile}"])
+    if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+        cmd.append("--ozone-platform=x11")
+    # Add headless flag if requested
+    if headless:
+        # Use --headless=new for newer Chrome versions, fallback to --headless for older
+        cmd.append("--headless=new")
+        # Additional flags for better headless compatibility
+        cmd.extend(["--disable-gpu", "--no-sandbox"])
     return cmd
 
 
@@ -119,18 +209,21 @@ def open_browser(cmd: list[str]) -> subprocess.Popen:
     try:
         # Open browser as a subprocess
         # Only if a new window should be opened
-        if os.name == 'posix':
+        if os.name == "posix":
             chrome = subprocess.Popen(
-                cmd, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, start_new_session=True
+                cmd,
+                stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                start_new_session=True,
             )
         else:
             chrome = subprocess.Popen(cmd)
     except OSError as e:
-        print('Unexpected error:', e)
+        print("Unexpected error:", e)
         print(f"Running command: '{' '.join(cmd)}'")
         sys.exit(1)
 
-    print(f'Opening browser [{chrome.pid}]')
+    print(f"Opening browser [{chrome.pid}]")
     return chrome
 
 
@@ -144,31 +237,31 @@ def close_browser(chrome: subprocess.Popen | None):
         return
 
     if chrome.poll() is not None:  # Check if the process has already terminated
-        print(f'Browser [{chrome.pid}] has already terminated.')
+        print(f"Browser [{chrome.pid}] has already terminated.")
         return
 
-    print(f'Closing browser [{chrome.pid}]')
+    print(f"Closing browser [{chrome.pid}]")
     try:
-        if os.name == 'posix':
+        if os.name == "posix":
             os.killpg(chrome.pid, signal.SIGTERM)
             # Optionally wait for process termination to avoid zombies
             chrome.wait(timeout=5)  # Wait for up to 5 seconds
         else:
             subprocess.run(
-                ['taskkill', '/F', '/T', '/PID', str(chrome.pid)],
+                ["taskkill", "/F", "/T", "/PID", str(chrome.pid)],
                 capture_output=True,
                 check=True,  # raise exception if taskkill fails
                 timeout=5,
             )
     except ProcessLookupError:
-        print(f'Browser process [{chrome.pid}] not found (already closed).')
+        print(f"Browser process [{chrome.pid}] not found (already closed).")
     except subprocess.CalledProcessError as e:
-        print(f'Error closing browser [{chrome.pid}]: {e}')
-        print(f'Stderr: {e.stderr.decode()}')
+        print(f"Error closing browser [{chrome.pid}]: {e}")
+        print(f"Stderr: {e.stderr.decode()}")
     except subprocess.TimeoutExpired:
-        print(f'Timeout while closing browser [{chrome.pid}].')
+        print(f"Timeout while closing browser [{chrome.pid}].")
     except Exception as e:
-        print(f'Unexpected error while closing browser [{chrome.pid}]: {e}')
+        print(f"Unexpected error while closing browser [{chrome.pid}]: {e}")
 
 
 def search(count: int, words_gen: Iterator[str], agent: str, options: Namespace):
@@ -177,9 +270,13 @@ def search(count: int, words_gen: Iterator[str], agent: str, options: Namespace)
     Open a chromium browser window with specified `agent` string, complete `count`
     searches from list `words`, finally terminate browser process on completion.
     """
+    if getattr(options, "headless", False):
+        return search_headless(count, words_gen, agent, options)
+
     chrome = None
     if not options.no_window:
-        cmd = browser_cmd(options.browser_path, agent, options.profile)
+        headless_flag = getattr(options, "headless", False)
+        cmd = browser_cmd(options.browser_path, agent, options.profile, headless_flag)
         if not options.dryrun:
             chrome = open_browser(cmd)
 
@@ -191,7 +288,7 @@ def search(count: int, words_gen: Iterator[str], agent: str, options: Namespace)
 
     # Ctrl + E to open address bar with the default search engine
     # Alt + D focuses address bar without using search engine
-    key_mod, key = (Key.ctrl, 'e') if options.bing else (Key.alt, 'd')
+    key_mod, key = (Key.ctrl, "e") if options.bing else (Key.alt, "d")
 
     for i in range(count):
         # Get a random query from set of words
@@ -215,12 +312,12 @@ def search(count: int, words_gen: Iterator[str], agent: str, options: Namespace)
 
             # Type the url into the address bar
             # with a 30ms delay between keystrokes
-            for char in search_url + '\n':
+            for char in search_url + "\n":
                 key_controller.tap(char)
                 time.sleep(0.03)
             key_controller.tap(Key.enter)
 
-        print(f'Search {i + 1}: {query}')
+        print(f"Search {i + 1}: {query}")
 
         # Delay to let page load
         match options.search_delay:
@@ -230,7 +327,9 @@ def search(count: int, words_gen: Iterator[str], agent: str, options: Namespace)
                 delay = random.uniform(min_s, max_s)
             case other:
                 # catastrophic failure
-                raise ValueError(f'Invalid configuration format: "search_delay": {other!r}')
+                raise ValueError(
+                    f'Invalid configuration format: "search_delay": {other!r}'
+                )
 
         time.sleep(delay)
 
@@ -251,27 +350,27 @@ def main():
     options = app_options.get_options()
     words_gen = word_generator()
 
-    def desktop(profile=''):
+    def desktop(profile=""):
         # Complete search with desktop settings
-        count = options.count if 'count' in options else options.desktop_count
+        count = options.count if "count" in options else options.desktop_count
         print(f'Doing {count} desktop searches using "{profile}"')
 
         temp_options = options
         temp_options.profile = profile
         search(count, words_gen, options.desktop_agent, temp_options)
-        print('Desktop Search complete!\n')
+        print("Desktop Search complete!\n")
 
-    def mobile(profile=''):
+    def mobile(profile=""):
         # Complete search with mobile settings
-        count = options.count if 'count' in options else options.mobile_count
+        count = options.count if "count" in options else options.mobile_count
         print(f'Doing {count} mobile searches using "{profile}"')
 
         temp_options = options
         temp_options.profile = profile
         search(count, words_gen, options.mobile_agent, temp_options)
-        print('Mobile Search complete!\n')
+        print("Mobile Search complete!\n")
 
-    def both(profile=''):
+    def both(profile=""):
         desktop(profile)
         mobile(profile)
 
@@ -287,28 +386,38 @@ def main():
     # Run for each specified profile (defaults to ['Default'])
     for profile in options.profile:
         # Start the searching in separate thread
-        search_thread = threading.Thread(target=target_func, args=(profile,), daemon=True)
+        search_thread = threading.Thread(
+            target=target_func, args=(profile,), daemon=True
+        )
         search_thread.start()
 
-        print('Press ESC to quit searching')
+        if getattr(options, "headless", False):
+            print("Running in headless mode - press CTRL-C to quit")
+        else:
+            print("Press ESC to quit searching")
 
         try:
             # Listen for keyboard events and exit if ESC pressed
-            while search_thread.is_alive():
-                with keyboard.Events() as events:
-                    event = events.get(timeout=0.5)  # block for 0.5 seconds
-                    # Exit if ESC key pressed
-                    if event and event.key == Key.esc:
-                        print('ESC pressed, terminating')
-                        return  # Exit the entire function if ESC is pressed
-
+            # Skip in headless mode since we use Selenium instead of pynput
+            if not getattr(options, "headless", False):
+                while search_thread.is_alive():
+                    with keyboard.Events() as events:
+                        event = events.get(timeout=0.5)  # block for 0.5 seconds
+                        # Exit if ESC key pressed
+                        if event and event.key == Key.esc:
+                            print("ESC pressed, terminating")
+                            return  # Exit the entire function if ESC is pressed
+            else:
+                # In headless mode, just wait for the thread
+                search_thread.join()
         except KeyboardInterrupt:
-            print('CTRL-C pressed, terminating')
+            print("CTRL-C pressed, terminating")
             return  # Exit the entire function if CTRL-C is pressed
 
         # Wait for the current profile's searches to complete
-        search_thread.join()
+        if not getattr(options, "headless", False):
+            search_thread.join()
 
     # Open rewards dashboard
     if options.open_rewards and not options.dryrun:
-        webbrowser.open_new('https://account.microsoft.com/rewards')
+        webbrowser.open_new("https://account.microsoft.com/rewards")
