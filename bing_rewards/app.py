@@ -49,19 +49,81 @@ def _get_search_delay(options: Namespace) -> float:
             raise ValueError(f'Invalid configuration format: "search_delay": {other!r}')
 
 
-def _create_chrome_driver(options: Namespace, agent: str):
-    """Create and return a Chrome WebDriver for headless mode."""
+def _headless_profile_dir(options: Namespace) -> Path:
+    """Resolve the persistent User Data dir used for headless runs.
+
+    This is a DEDICATED dir (next to config.json), NOT your real Chrome
+    profile. Your real profile cannot be reused: chromedriver crashes on
+    it (DevToolsActivePort), copies of it lose the login to app-bound
+    encryption, and remote-debugging attach is blocked by Chrome for the
+    default data directory. A dedicated dir + one-time `--setup-login`
+    is the reliable path.
+    """
+    custom = getattr(options, "user_data_dir", None)
+    if custom:
+        p = Path(custom)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    if env_dir := os.environ.get("CHROME_USER_DATA_DIR"):
+        p = Path(env_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    p = app_options.config_location().parent / "chrome-headless-profile"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _resolve_profile(options: Namespace) -> str:
+    """Normalize options.profile (str or list[str]) to a single name."""
+    profile = getattr(options, "profile", "Default")
+    if isinstance(profile, (list, tuple)):
+        return profile[0] if profile else "Default"
+    return profile or "Default"
+
+
+def _create_chrome_driver(options: Namespace, agent: str, headed: bool = False):
+    """Create and return a Chrome WebDriver using the persistent profile.
+
+    Always uses the dedicated `--user-data-dir` so the Microsoft login
+    (saved via `--setup-login`) is present. Without persistence Selenium
+    gets a fresh anonymous profile and Bing awards no points.
+    """
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options as ChromeOptions
 
     chrome_options = ChromeOptions()
     chrome_options.add_argument(f"--user-agent={agent}")
-    if getattr(options, "headless", False):
-        chrome_options.headless = True
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--no-sandbox")
+    if not headed:
+        # NOTE: `chrome_options.headless = True` was removed in Selenium 4.x.
+        # It silently did nothing, so Chrome launched headed. The flag must
+        # be passed explicitly. (Do NOT add excludeSwitches/useAutomation
+        # tweaks here: they break networking when a profile is attached.)
+        chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1280,720")
 
-    return webdriver.Chrome(options=chrome_options)
+    profile = _resolve_profile(options)
+    if profile:
+        chrome_options.add_argument(f"--profile-directory={profile}")
+    chrome_options.add_argument(f"--user-data-dir={_headless_profile_dir(options)}")
+
+    # Respect custom browser binary (--exe / browser_path) if provided
+    browser_path = getattr(options, "browser_path", None)
+    if browser_path and str(browser_path) not in ("chrome", "chrome.exe"):
+        chrome_options.binary_location = str(browser_path)
+
+    try:
+        return webdriver.Chrome(options=chrome_options)
+    except Exception as e:
+        msg = str(e).lower()
+        if "already in use" in msg or "user data directory" in msg:
+            print(
+                "Headless Chrome profile is locked. "
+                "Close any other bing-rewards headless run, then retry."
+            )
+        raise
 
 
 def search_headless(
@@ -79,12 +141,19 @@ def search_headless(
     except ImportError:
         print(
             "Selenium is required for headless mode. "
-            "Install with: pip install bing-rewards[headless]"
+            "Install with: pip install bing-rewards[headless] "
+            "or (uv): uv sync --extra headless / uv pip install selenium"
         )
         sys.exit(1)
 
+    profile = _resolve_profile(options)
+    print(
+        f'Headless using persistent profile "{profile}" in {_headless_profile_dir(options)}'
+    )
+
     driver = _create_chrome_driver(options, agent)
     wait = WebDriverWait(driver, 10)
+    login_warned = False
     try:
         for i in range(count):
             query = next(words_gen)
@@ -93,6 +162,17 @@ def search_headless(
             if not options.dryrun:
                 driver.get("https://www.bing.com")
                 time.sleep(options.load_delay)
+
+                if not login_warned and i == 0:
+                    login_warned = True
+                    if not _headless_logged_in(driver):
+                        print(
+                            "Warning: Bing does not appear logged in "
+                            f'(profile "{profile}"). Points will NOT count. '
+                            "Run once: bing-rewards --setup-login "
+                            "(a browser window opens; log into bing.com, "
+                            "then press Enter here)."
+                        )
 
                 search_box = wait.until(
                     EC.presence_of_element_located((By.ID, "sb_form_q"))
@@ -112,6 +192,62 @@ def search_headless(
         print(f"Headless search error: {e}")
         driver.quit()
         sys.exit(1)
+
+
+def _headless_logged_in(driver) -> bool:
+    """Heuristic: is Bing logged in? Checks the account name header.
+
+    Logged in: <span id="id_n">Lukas</span> (any non-sign-in text).
+    Logged out: same element reads "Sign in"/"Anmelden" (or is missing).
+    """
+    try:
+        name = driver.find_element("id", "id_n").text.strip().lower()
+        return bool(name) and name not in ("sign in", "log in", "anmelden")
+    except Exception:
+        return False
+
+
+def setup_headless_login(options: Namespace) -> None:
+    """One-time login for the persistent headless profile.
+
+    Opens a VISIBLE Chrome window using the same dedicated profile dir
+    that headless runs use. The user logs into bing.com manually; on
+    Enter the window closes and cookies persist for future headless runs.
+    """
+    try:
+        import selenium  # noqa: F401 (import check only)
+    except ImportError:
+        print(
+            "Selenium is required for headless mode. "
+            "Install with: pip install bing-rewards[headless] "
+            "or (uv): uv sync --extra headless / uv pip install selenium"
+        )
+        sys.exit(1)
+
+    print(
+        f"Opening a visible Chrome window (profile dir: {_headless_profile_dir(options)})."
+    )
+    print("Log into https://www.bing.com with your Microsoft account there.")
+    driver = _create_chrome_driver(options, options.desktop_agent, headed=True)
+    try:
+        driver.get("https://www.bing.com")
+        time.sleep(options.load_delay)
+        try:
+            input(
+                "Press Enter HERE after you are logged in (rewards medal visible)... "
+            )
+        except (KeyboardInterrupt, EOFError):
+            print("Login setup cancelled.")
+            return
+        if _headless_logged_in(driver):
+            print("Login looks good! Future `--headless` runs will earn points.")
+        else:
+            print(
+                "Warning: still looks logged out. Re-run "
+                "`bing-rewards --setup-login` and complete the login."
+            )
+    finally:
+        driver.quit()
 
 
 def word_generator() -> Iterator[str]:
@@ -348,6 +484,11 @@ def main():
     Setup listener callback for ESC key.
     """
     options = app_options.get_options()
+
+    if getattr(options, "setup_login", False):
+        setup_headless_login(options)
+        return
+
     words_gen = word_generator()
 
     def desktop(profile=""):

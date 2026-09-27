@@ -66,6 +66,8 @@ class Config:
     desktop_agent: str = DESKTOP_AGENT
     mobile_agent: str = MOBILE_AGENT
     browser_path: str = "chrome"
+    user_data_dir: str | None = None  # None = dedicated dir next to config.json
+    setup_login: bool = False  # One-time headed login for the headless profile
     bing: bool = False  # True means Bing is default search engine
     open_rewards: bool = False
     window: bool = True
@@ -186,6 +188,26 @@ def parse_args() -> Namespace:
         help="Sets one or more chrome profiles to run sequentially (space separated)",
         type=str,
         nargs="+",
+    )
+    p.add_argument(
+        "--user-data-dir",
+        help=(
+            "Path to the persistent Chrome User Data dir used for headless "
+            "login. Defaults to a dedicated 'chrome-headless-profile' dir "
+            "next to the config file. NOTE: do NOT point this at your real "
+            "Chrome profile (it will crash); log in once via --setup-login."
+        ),
+        type=str,
+        dest="user_data_dir",
+    )
+    p.add_argument(
+        "--setup-login",
+        help=(
+            "One-time login for headless mode: opens a visible Chrome window "
+            "using the headless profile so you can log into bing.com. "
+            "Cookies persist for future --headless runs."
+        ),
+        action="store_true",
     )
     args = p.parse_args()
     return args

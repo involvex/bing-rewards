@@ -22,7 +22,10 @@
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
   ]
-  dependencies = ["pynput~=1.8"]
+  dependencies = [
+    "pynput~=1.8",
+    "selenium>=4.49.0",
+]
 
   [project.optional-dependencies]
   headless = ["selenium~=4.20"]
