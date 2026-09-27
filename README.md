@@ -119,6 +119,10 @@ Options supplied at execution time override any config.
 | `-X`, `--no-exit`          | Do not close the browser after completing a search                                                     |
 | `--profile`                | Run searches using specified Chrome profile(s). Multiple profiles can be specified to run sequentially |
 | `--ime`                    | Triggers Windows IME to switch to English input by pressing "shift"                                    |
+| `--earn`                   | Discover and complete earn activities from `rewards.bing.com/earn` (daily set, explore, polls, quizzes) instead of searches. Requires selenium |
+| `--daily-set-only`         | With `--earn`, only complete daily-set quiz/poll items                                                  |
+| `--explore-only`           | With `--earn`, only complete explore click-through cards                                                |
+| `--earn-headed`            | Run the `--earn` browser visibly (for debugging)                                                        |
 
 ## Config
 A config file is also generated in $XDG_CONFIG_HOME or %APPDATA% on Windows

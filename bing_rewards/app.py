@@ -13,13 +13,13 @@ import sys
 import threading
 import time
 import webbrowser
+from argparse import Namespace
 from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import quote_plus
 
 if TYPE_CHECKING:
-    from argparse import Namespace
     from collections.abc import Iterator
 
 if os.name == "posix":
@@ -489,6 +489,10 @@ def main():
         setup_headless_login(options)
         return
 
+    do_earn = bool(getattr(options, "earn", False))
+    # --earn runs earn activities *instead of* searches.
+    do_search = not do_earn
+
     words_gen = word_generator()
 
     def desktop(profile=""):
@@ -526,38 +530,54 @@ def main():
 
     # Run for each specified profile (defaults to ['Default'])
     for profile in options.profile:
-        # Start the searching in separate thread
-        search_thread = threading.Thread(
-            target=target_func, args=(profile,), daemon=True
-        )
-        search_thread.start()
+        if do_search:
+            # Start the searching in separate thread
+            search_thread = threading.Thread(
+                target=target_func, args=(profile,), daemon=True
+            )
+            search_thread.start()
 
-        if getattr(options, "headless", False):
-            print("Running in headless mode - press CTRL-C to quit")
-        else:
-            print("Press ESC to quit searching")
-
-        try:
-            # Listen for keyboard events and exit if ESC pressed
-            # Skip in headless mode since we use Selenium instead of pynput
-            if not getattr(options, "headless", False):
-                while search_thread.is_alive():
-                    with keyboard.Events() as events:
-                        event = events.get(timeout=0.5)  # block for 0.5 seconds
-                        # Exit if ESC key pressed
-                        if event and event.key == Key.esc:
-                            print("ESC pressed, terminating")
-                            return  # Exit the entire function if ESC is pressed
+            if getattr(options, "headless", False):
+                print("Running in headless mode - press CTRL-C to quit")
             else:
-                # In headless mode, just wait for the thread
-                search_thread.join()
-        except KeyboardInterrupt:
-            print("CTRL-C pressed, terminating")
-            return  # Exit the entire function if CTRL-C is pressed
+                print("Press ESC to quit searching")
 
-        # Wait for the current profile's searches to complete
-        if not getattr(options, "headless", False):
-            search_thread.join()
+            try:
+                # Listen for keyboard events and exit if ESC pressed
+                # Skip in headless mode since we use Selenium instead of pynput
+                if not getattr(options, "headless", False):
+                    while search_thread.is_alive():
+                        with keyboard.Events() as events:
+                            event = events.get(timeout=0.5)  # block for 0.5 seconds
+                            # Exit if ESC key pressed
+                            if event and event.key == Key.esc:
+                                print("ESC pressed, terminating")
+                                return  # Exit the entire function if ESC is pressed
+                else:
+                    # In headless mode, just wait for the thread
+                    search_thread.join()
+            except KeyboardInterrupt:
+                print("CTRL-C pressed, terminating")
+                return  # Exit the entire function if CTRL-C is pressed
+
+            # Wait for the current profile's searches to complete
+            if not getattr(options, "headless", False):
+                search_thread.join()
+
+        if do_earn:
+            from bing_rewards import earn as earn_module
+
+            print(f'Running earn activities for profile "{profile}"...')
+            # run_earn resolves the profile via options.profile; pass a
+            # single-profile namespace so multi-profile runs stay isolated.
+            earn_options = Namespace(**vars(options))
+            earn_options.profile = profile
+            try:
+                earn_module.run_earn(earn_options)
+            except KeyboardInterrupt:
+                print("CTRL-C pressed, terminating")
+                return
+            print("Earn activities complete!\n")
 
     # Open rewards dashboard
     if options.open_rewards and not options.dryrun:

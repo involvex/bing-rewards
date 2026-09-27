@@ -75,6 +75,12 @@ class Config:
     ime: bool = False
     headless: bool = False
     profile: list[str] = dataclasses.field(default_factory=lambda: ["Default"])
+    # Opt-in earn automation (rewards.bing.com/earn). Default off.
+    # When True, earn activities run *instead of* searches.
+    earn: bool = False
+    daily_set_only: bool = False
+    explore_only: bool = False
+    earn_headed: bool = False
 
 
 def parse_args() -> Namespace:
@@ -209,6 +215,35 @@ def parse_args() -> Namespace:
         ),
         action="store_true",
     )
+    p.add_argument(
+        "--earn",
+        help=(
+            "Discover and complete earn activities from "
+            "https://rewards.bing.com/earn (daily set, explore, polls, quizzes) "
+            "instead of searches. Requires selenium; uses the same persistent "
+            "profile as --headless."
+        ),
+        action=BooleanOptionalAction,
+        default=None,
+    )
+    p.add_argument(
+        "--daily-set-only",
+        help="With --earn, only complete daily-set quiz/poll items",
+        action=BooleanOptionalAction,
+        default=None,
+    )
+    p.add_argument(
+        "--explore-only",
+        help="With --earn, only complete explore click-through cards",
+        action=BooleanOptionalAction,
+        default=None,
+    )
+    p.add_argument(
+        "--earn-headed",
+        help="Run the --earn browser visibly (for debugging)",
+        action=BooleanOptionalAction,
+        default=None,
+    )
     args = p.parse_args()
     return args
 
@@ -279,8 +314,11 @@ def read_config() -> Config:
         except json.decoder.JSONDecodeError as e:
             print(e)
             print("Config JSON format error. Reverting to default.")
-    # return dataclass with values from config taking priority
-    return Config(**config)
+    # return dataclass with values from config taking priority.
+    # Ignore unknown keys so stale config files (e.g. from removed options)
+    # don't crash startup; defaults apply for anything missing.
+    known = {f.name for f in dataclasses.fields(Config)}
+    return Config(**{k: v for k, v in config.items() if k in known})
 
 
 def get_options() -> Namespace:
