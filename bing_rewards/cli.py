@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 from argparse import Namespace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pynput import keyboard
@@ -47,11 +48,13 @@ from bing_rewards.words import word_generator
 if TYPE_CHECKING:
     from bing_rewards.rewards.models import RewardsSnapshot
 
-log = get_logger("cli")
+log = get_logger('cli')
 
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_NO_POINTS = 2
+
+MAX_ERROR_LEN = 300
 
 
 def _profile_options(options: Namespace, profile: str) -> Namespace:
@@ -62,10 +65,18 @@ def _profile_options(options: Namespace, profile: str) -> Namespace:
 
 
 def _resolve_count(options: Namespace, desktop: bool) -> int:
-    """Resolve the search count for one mode, honouring --count."""
-    if options.count:
-        return options.count
-    return app_options.DESKTOP_COUNT if desktop else app_options.MOBILE_COUNT
+    """Resolve the search count for one mode, honouring --count.
+
+    ``--count`` is a CLI-only override with no default and is *absent* from
+    the merged Namespace when not supplied (get_options() skips None values).
+    Use getattr so a missing attribute falls back to the per-mode config
+    value, which itself defaults to the DESKTOP_COUNT / MOBILE_COUNT
+    constants.
+    """
+    override = getattr(options, 'count', None)
+    if override:
+        return override
+    return options.desktop_count if desktop else options.mobile_count
 
 
 def _search_loop(
@@ -81,8 +92,8 @@ def _search_loop(
     quota plan (remaining searches per mode) and the --max-searches budget.
     """
     total = 0
-    do_desktop = mode in ("desktop", "both")
-    do_mobile = mode in ("mobile", "both")
+    do_desktop = mode in ('desktop', 'both')
+    do_mobile = mode in ('mobile', 'both')
 
     if do_desktop:
         requested = (
@@ -97,7 +108,7 @@ def _search_loop(
             )
             total += outcome.searches
             ctx.budget.spend(outcome.searches)
-            log.info("Desktop searches complete: %d", outcome.searches)
+            log.info('Desktop searches complete: %d', outcome.searches)
 
     if do_mobile:
         remaining_budget = ctx.budget.remaining()
@@ -114,7 +125,7 @@ def _search_loop(
                 )
                 total += outcome.searches
                 ctx.budget.spend(outcome.searches)
-                log.info("Mobile searches complete: %d", outcome.searches)
+                log.info('Mobile searches complete: %d', outcome.searches)
 
     return total
 
@@ -125,24 +136,24 @@ def _listen_for_abort(thread: threading.Thread, options: Namespace) -> bool:
     Returns ``True`` when the thread finished naturally, ``False`` when aborted.
     """
     if not options.headless:
-        print("Press ESC to quit searching")
+        print('Press ESC to quit searching')
         try:
             with keyboard.Events() as events:
                 while thread.is_alive():
                     event = events.get(timeout=0.5)
                     if event and event.key == Key.esc:
-                        print("ESC pressed, terminating")
+                        print('ESC pressed, terminating')
                         return False
         except KeyboardInterrupt:
-            print("CTRL-C pressed, terminating")
+            print('CTRL-C pressed, terminating')
             return False
         thread.join()
     else:
-        print("Running in headless mode - press CTRL-C to quit")
+        print('Running in headless mode - press CTRL-C to quit')
         try:
             thread.join()
         except KeyboardInterrupt:
-            print("CTRL-C pressed, terminating")
+            print('CTRL-C pressed, terminating')
             return False
     return True
 
@@ -150,24 +161,46 @@ def _listen_for_abort(thread: threading.Thread, options: Namespace) -> bool:
 def _run_searches_for_profile(
     ctx: SearchContext,
     profile: str,
-) -> int:
+) -> tuple[int, Exception | None]:
     """Run the configured search mode for one profile.
 
-    Returns the number of searches performed.
+    Returns ``(searches, error)``. Exceptions raised in the worker thread are
+    captured here instead of being swallowed by ``threading`` -- otherwise a
+    crash (e.g. Chrome failing to start) prints a bare traceback and the run
+    is still reported as "completed" with 0 searches.
     """
     options = ctx.options
-    mode = "mobile" if options.mobile else ("desktop" if options.desktop else "both")
+    mode = 'mobile' if options.mobile else ('desktop' if options.desktop else 'both')
 
-    state = {"total": 0}
+    total = 0
+    error: Exception | None = None
 
     def target() -> None:
-        state["total"] = _search_loop(mode, ctx, profile)
+        nonlocal total, error
+        try:
+            total = _search_loop(mode, ctx, profile)
+        except Exception as exc:  # noqa: BLE001 - surfaced in the run report
+            error = exc
 
     thread = threading.Thread(target=target, daemon=True)
     thread.start()
     _listen_for_abort(thread, options)
     thread.join(timeout=0)
-    return state["total"]
+    return total, error
+
+
+def _format_error(error: Exception) -> str:
+    """Condense an exception to a short, single-line diagnostic.
+
+    Selenium exceptions embed a multi-line stacktrace and a documentation URL;
+    neither belongs in the end-of-run summary.
+    """
+    message = ' '.join(str(error).split())
+    for marker in ('Stacktrace', 'For documentation'):
+        message = message.split(marker, 1)[0].strip()
+    if len(message) > MAX_ERROR_LEN:
+        message = message[: MAX_ERROR_LEN - 3] + '...'
+    return f'{type(error).__name__}: {message}'
 
 
 def _run_searches(
@@ -177,11 +210,14 @@ def _run_searches(
 ) -> None:
     """Run searches for one profile and append to the report."""
     print(f'Doing searches for profile "{profile}"...')
-    searches = _run_searches_for_profile(ctx, profile)
+    searches, error = _run_searches_for_profile(ctx, profile)
     print(f'Searches complete for profile "{profile}" ({searches}).')
-    report.accounts.append(
-        AccountRun(profile=profile, backend=report.backend, searches=searches)
-    )
+    account = AccountRun(profile=profile, backend=report.backend, searches=searches)
+    if error is not None:
+        account.status = STATUS_FAILED
+        account.error = _format_error(error)
+        log.error('Search failed for profile %s: %s', profile, account.error)
+    report.accounts.append(account)
 
 
 def _run_earn(options: Namespace, profile: str, report: RunReport) -> bool:
@@ -191,25 +227,38 @@ def _run_earn(options: Namespace, profile: str, report: RunReport) -> bool:
     try:
         earn_module.run_earn(earn_options)
     except KeyboardInterrupt:
-        print("CTRL-C pressed, terminating")
+        print('CTRL-C pressed, terminating')
         report.status = STATUS_FAILED
-        report.error = "interrupted"
+        report.error = 'interrupted'
         return False
-    print("Earn activities complete!")
+    print('Earn activities complete!')
     return True
 
 
+def _cookie_file(options: Namespace) -> Path:
+    """Resolve the cookie file: explicit --cookies-file or --setup-login default."""
+    explicit = getattr(options, 'cookies_file', None)
+    return Path(explicit) if explicit else app_options.cookies_location()
+
+
 def _fetch_snapshot(options: Namespace) -> RewardsSnapshot | None:
-    """Fetch the Rewards dashboard snapshot (best-effort; never crashes)."""
+    """Fetch the Rewards dashboard snapshot (best-effort; never crashes).
+
+    Without session cookies the Rewards endpoints redirect to OAuth sign-in,
+    so skip the request entirely instead of emitting a misleading warning on
+    every run. Quota-aware searching simply falls back to configured counts.
+    """
+    cookie_file = _cookie_file(options)
+    if not cookie_file.is_file():
+        log.debug('Rewards read-out skipped: no cookie file at %s', cookie_file)
+        return None
     try:
-        cookies = {}
-        if options.cookies_file:
-            cookies = load_cookies(options.cookies_file)
+        cookies = load_cookies(cookie_file)
         http = RewardsHttp(cookies=cookies)
         client = RewardsClient(http=http)
         return client.fetch_snapshot()
     except Exception as e:  # noqa: BLE001 - dashboard read-out is best-effort
-        log.warning("Dashboard read-out failed: %s", e)
+        log.warning('Rewards read-out failed: %s', e)
         return None
 
 
@@ -223,21 +272,20 @@ def main() -> int:
     options = app_options.get_options()
     setup_logging(level=options.log_level, log_file=options.log_file)
 
-    if getattr(options, "setup_login", False):
+    if getattr(options, 'setup_login', False):
         return setup_login(options)
 
     report = RunReport(
         version=app_options.__version,
         backend=resolve_backend(options),
-        dryrun=bool(getattr(options, "dryrun", False)),
+        dryrun=bool(getattr(options, 'dryrun', False)),
     )
-    report.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+    report.started_at = time.strftime('%Y-%m-%dT%H:%M:%S')
 
     # --points: read-only dashboard read-out via the Rewards endpoints.
-    if getattr(options, "points", False):
-        cookies = {}
-        if options.cookies_file:
-            cookies = load_cookies(options.cookies_file)
+    if getattr(options, 'points', False):
+        cookie_file = _cookie_file(options)
+        cookies = load_cookies(cookie_file) if cookie_file.is_file() else {}
         http = RewardsHttp(cookies=cookies)
         client = RewardsClient(http=http)
         snapshot = client.fetch_snapshot()
@@ -245,21 +293,21 @@ def main() -> int:
         if options.json:
             print(json.dumps(snapshot.to_dict(), indent=2))
         else:
-            print(f"bing-rewards v{app_options.__version} · points read-out")
+            print(f'bing-rewards v{app_options.__version} · points read-out')
             print(f'  source: {snapshot.source or "none"}')
-            print(f"  available points: {snapshot.available_points}")
-            print(f"  level: {snapshot.level}")
-            print(f"  lifetime earn: {snapshot.lifetime_earn}")
-            print(f"  desktop: {snapshot.desktop.label}")
-            print(f"  mobile: {snapshot.mobile.label}")
-            print(f"  edge: {snapshot.edge.label}")
+            print(f'  available points: {snapshot.available_points}')
+            print(f'  level: {snapshot.level}')
+            print(f'  lifetime earn: {snapshot.lifetime_earn}')
+            print(f'  desktop: {snapshot.desktop.label}')
+            print(f'  mobile: {snapshot.mobile.label}')
+            print(f'  edge: {snapshot.edge.label}')
             if snapshot.missing_sections:
                 print(f'  missing sections: {", ".join(snapshot.missing_sections)}')
             print(render_text_summary(report))
         return EXIT_SUCCESS
 
     words = word_generator()
-    budget = SearchBudget(max_searches=getattr(options, "max_searches", None))
+    budget = SearchBudget(max_searches=getattr(options, 'max_searches', None))
 
     # Fetch the dashboard snapshot for quota-aware searching (unless dryrun).
     snapshot = _fetch_snapshot(options) if not options.dryrun else None
@@ -279,9 +327,9 @@ def main() -> int:
     else:
         print(render_text_summary(report))
 
-    if report.status == STATUS_NO_POINTS and not getattr(
-        options, "run_on_zero_points", False
-    ):
+    if report.status == STATUS_FAILED:
+        return EXIT_ERROR
+    if report.status == STATUS_NO_POINTS and not getattr(options, 'run_on_zero_points', False):
         return EXIT_NO_POINTS
     return EXIT_SUCCESS
 
@@ -293,7 +341,7 @@ def _run_all_profiles(
 ) -> None:
     """Run searches and/or earn for every configured profile."""
     options = ctx.options
-    do_earn = bool(getattr(options, "earn", False))
+    do_earn = bool(getattr(options, 'earn', False))
     do_search = not do_earn
 
     for profile in profiles:
@@ -316,5 +364,5 @@ def _run_all_profiles(
             break
 
 
-if __name__ == "__main__":  # pragma: no cover - manual smoke helper
+if __name__ == '__main__':  # pragma: no cover - manual smoke helper
     sys.exit(main())

@@ -27,7 +27,9 @@ from bing_rewards.rewards.parse import (
     parse_panelflyout,
 )
 
-log = get_logger("rewards.api")
+log = get_logger('rewards.api')
+
+MAX_ERROR_LEN = 200
 
 
 class RewardsClient:
@@ -36,7 +38,7 @@ class RewardsClient:
     def __init__(
         self,
         http: RewardsHttp | None = None,
-        user_agent: str = "",
+        user_agent: str = '',
     ) -> None:
         self.http = http or RewardsHttp(user_agent=user_agent)
 
@@ -49,38 +51,44 @@ class RewardsClient:
         last_error: str | None = None
 
         for name, url, parser in (
-            ("dapi/me", DAPI_ME_URL, parse_dapi_me),
-            ("panelflyout", PANELFLYOUT_URL, parse_panelflyout),
-            ("getuserinfo", GETUSERINFO_URL, parse_getuserinfo),
+            ('dapi/me', DAPI_ME_URL, parse_dapi_me),
+            ('panelflyout', PANELFLYOUT_URL, parse_panelflyout),
+            ('getuserinfo', GETUSERINFO_URL, parse_getuserinfo),
         ):
             try:
                 data = self.http.json_get(url)
             except RewardsHttpError as e:
                 last_error = str(e)
-                log.debug("%s transport failed: %s", name, e)
+                log.debug('%s transport failed: %s', name, e)
                 continue
             except Exception as e:  # noqa: BLE001 - network is inherently flaky
                 last_error = str(e)
-                log.debug("%s transport error: %s", name, e)
+                log.debug('%s transport error: %s', name, e)
                 continue
 
             snapshot = parser(data)
             if snapshot.available_points > 0 or snapshot.counters:
                 log.info(
-                    "Rewards snapshot from %s: %d points, %d counter(s)",
+                    'Rewards snapshot from %s: %d points, %d counter(s)',
                     name,
                     snapshot.available_points,
                     len(snapshot.counters),
                 )
                 return snapshot
 
-            log.debug("%s returned empty data", name)
+            log.debug('%s returned empty data', name)
 
+        # Redirect errors can embed a full OAuth authorize URL containing
+        # state/nonce/code_challenge values - never print that verbatim.
+        reason = ' '.join((last_error or 'unknown').split())
+        if len(reason) > MAX_ERROR_LEN:
+            reason = reason[: MAX_ERROR_LEN - 3] + '...'
         log.warning(
-            "All Rewards transports failed (last error: %s); returning empty snapshot.",
-            last_error or "unknown",
+            'Rewards read-out unavailable (%s); using default search counts. '
+            'Pass --cookies-file or run --setup-login to enable quota data.',
+            reason,
         )
-        return RewardsSnapshot(source="none", missing_sections=["all"])
+        return RewardsSnapshot(source='none', missing_sections=['all'])
 
     def check_signed_in(self, html: str) -> bool:
         """Return True if ``html`` looks like a sign-in page (session expired)."""

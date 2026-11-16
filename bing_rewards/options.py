@@ -22,9 +22,9 @@ from pathlib import Path
 import bing_rewards
 
 try:
-    __version = metadata.version("bing_rewards")
+    __version = metadata.version('bing_rewards')
 except metadata.PackageNotFoundError:
-    __version = "unknown+local"
+    __version = 'unknown+local'
 
 # Number of searches to make
 DESKTOP_COUNT = 33
@@ -41,20 +41,20 @@ WEBDRIVER_TIMEOUT = 10.0
 SEARCH_DELAY = 6.0
 
 # Bing Search base url, with new form= parameter (code differs per browser?)
-URL = "https://www.bing.com/search?form=QBRE&q="
+URL = 'https://www.bing.com/search?form=QBRE&q='
 
 # Edge Browser user agents
 # Makes Google Chrome look like MS Edge to Bing
 MOBILE_AGENT = (
-    "Mozilla/5.0 (Linux; Android 14; Pixel 6 Build/AP2A.240605.024) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/121.0.0.0 Mobile Safari/537.36 Edge/121.0.2277.138"
+    'Mozilla/5.0 (Linux; Android 14; Pixel 6 Build/AP2A.240605.024) '
+    'AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/121.0.0.0 Mobile Safari/537.36 Edge/121.0.2277.138'
 )
 
 DESKTOP_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/126.0.0.0 Safari/537.36 Edge/126.0.0.0"
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+    'AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/126.0.0.0 Safari/537.36 Edge/126.0.0.0'
 )
 
 
@@ -70,7 +70,7 @@ class Config:
     search_url: str = URL
     desktop_agent: str = DESKTOP_AGENT
     mobile_agent: str = MOBILE_AGENT
-    browser_path: str = "chrome"
+    browser_path: str = 'chrome'
     user_data_dir: str | None = None  # None = dedicated dir next to config.json
     setup_login: bool = False  # One-time headed login for the headless profile
     bing: bool = False  # True means Bing is default search engine
@@ -79,7 +79,7 @@ class Config:
     exit: bool = True
     ime: bool = False
     headless: bool = False
-    profile: list[str] = dataclasses.field(default_factory=lambda: ["Default"])
+    profile: list[str] = dataclasses.field(default_factory=lambda: ['Default'])
     # Opt-in earn automation (rewards.bing.com/earn). Default off.
     # When True, earn activities run *instead of* searches.
     earn: bool = False
@@ -89,15 +89,15 @@ class Config:
     # Delay between earn activities (seconds). None = fall back to search_delay.
     earn_delay: float | None = None
     # Search backend: 'auto' (selenium, pynput fallback), 'selenium', 'pynput', 'api'.
-    backend: str = "auto"
+    backend: str = 'auto'
     # Browser window size (width,height) for Selenium runs.
-    window_size: str = "1280,720"
+    window_size: str = '1280,720'
     # Only read the rewards snapshot and exit (no searches).
     points: bool = False
     # Emit the run summary as JSON on stdout.
     json: bool = False
     # Logging level: critical, error, warning, info, debug.
-    log_level: str = "info"
+    log_level: str = 'info'
     # Optional file to write log output to.
     log_file: str | None = None
     # Optional JSON file with session cookies (name→value) for authenticated
@@ -118,7 +118,7 @@ def parse_args() -> Namespace:
             VERSION=__version,
             CONFIG=config_location(),
         ),
-        epilog="* Repository and issues: https://github.com/jack-mil/bing-search",
+        epilog='* Repository and issues: https://github.com/jack-mil/bing-search',
         formatter_class=RawDescriptionHelpFormatter,
         prog=Path(sys.argv[0]).name,
     )
@@ -127,206 +127,202 @@ def parse_args() -> Namespace:
         p.suggest_on_error = True  # pyright: ignore[reportUnreachable]
         p.color = True
 
-    p.add_argument("--version", action="version", version=f"%(prog)s v{__version}")
+    p.add_argument('--version', action='version', version=f'%(prog)s v{__version}')
     p.add_argument(
-        "-c",
-        "--count",
-        help="Override the number of searches to perform",
+        '-c',
+        '--count',
+        help='Override the number of searches to perform',
         type=int,
     )
     p.add_argument(
-        "-b",
-        "--bing",
-        help="Add this flag if your default search engine is Bing",
+        '-b',
+        '--bing',
+        help='Add this flag if your default search engine is Bing',
         action=BooleanOptionalAction,
         default=None,
     )
     # Mutually exclusive options. Only one can be present
     group = p.add_mutually_exclusive_group()
     group.add_argument(
-        "-d",
-        "--desktop",
-        help="Do only desktop searches",
-        action="store_true",
+        '-d',
+        '--desktop',
+        help='Do only desktop searches',
+        action='store_true',
     )
     group.add_argument(
-        "-m",
-        "--mobile",
-        help="Do only mobile searches (appear as phone browser)",
-        action="store_true",
+        '-m',
+        '--mobile',
+        help='Do only mobile searches (appear as phone browser)',
+        action='store_true',
     )
 
     # Other options
     p.add_argument(
-        "--exe",
-        help="The full path of the Chrome compatible browser executable",
+        '--exe',
+        help='The full path of the Chrome compatible browser executable',
         type=valid_file,
-        dest="browser_path",
+        dest='browser_path',
     )
     p.add_argument(
-        "--load-delay",
-        help="Override the time given to Chrome to load in seconds",
-        metavar="SEC",
+        '--load-delay',
+        help='Override the time given to Chrome to load in seconds',
+        metavar='SEC',
         type=int,
     )
     p.add_argument(
-        "--search-delay",
+        '--search-delay',
         help=(
-            "Override the time between searches in seconds.\t"
-            "Can be a single value, or comma separated range (e.g. 10,45)"
+            'Override the time between searches in seconds.\t'
+            'Can be a single value, or comma separated range (e.g. 10,45)'
         ),
-        metavar="MIN[,MAX]",
+        metavar='MIN[,MAX]',
         type=valid_range,
     )
     p.add_argument(
-        "-n",
-        "--dryrun",
-        help="Do everything but search",
-        action="store_true",
+        '-n',
+        '--dryrun',
+        help='Do everything but search',
+        action='store_true',
     )
     p.add_argument(
-        "--open-rewards",
-        help="Open the rewards page at the end of the run",
+        '--open-rewards',
+        help='Open the rewards page at the end of the run',
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "--window",
-        help="Open a new Chrome window (default: True)",
+        '--window',
+        help='Open a new Chrome window (default: True)',
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "-X",
-        "--exit",
-        help="Close the browser window after searching (default: True)",
+        '-X',
+        '--exit',
+        help='Close the browser window after searching (default: True)',
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "--ime",
-        help="Triggers windows IME to switch to english by pressing SHIFT",
+        '--ime',
+        help='Triggers windows IME to switch to english by pressing SHIFT',
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "--headless",
-        help="Run browser in headless mode (no GUI)",
+        '--headless',
+        help='Run browser in headless mode (no GUI)',
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "--profile",
-        help="Sets one or more chrome profiles to run sequentially (space separated)",
+        '--profile',
+        help='Sets one or more chrome profiles to run sequentially (space separated)',
         type=str,
-        nargs="+",
+        nargs='+',
     )
     p.add_argument(
-        "--user-data-dir",
+        '--user-data-dir',
         help=(
-            "Path to the persistent Chrome User Data dir used for headless "
+            'Path to the persistent Chrome User Data dir used for headless '
             "login. Defaults to a dedicated 'chrome-headless-profile' dir "
-            "next to the config file. NOTE: do NOT point this at your real "
-            "Chrome profile (it will crash); log in once via --setup-login."
+            'next to the config file. NOTE: do NOT point this at your real '
+            'Chrome profile (it will crash); log in once via --setup-login.'
         ),
         type=str,
-        dest="user_data_dir",
+        dest='user_data_dir',
     )
     p.add_argument(
-        "--setup-login",
+        '--setup-login',
         help=(
-            "One-time login for headless mode: opens a visible Chrome window "
-            "using the headless profile so you can log into bing.com. "
-            "Cookies persist for future --headless runs."
+            'One-time login for headless mode: opens a visible Chrome window '
+            'using the headless profile so you can log into bing.com. '
+            'Cookies persist for future --headless runs.'
         ),
-        action="store_true",
+        action='store_true',
     )
     p.add_argument(
-        "--earn",
+        '--earn',
         help=(
-            "Discover and complete earn activities from "
-            "https://rewards.bing.com/earn (daily set, explore, polls, quizzes) "
-            "instead of searches. Requires selenium; uses the same persistent "
-            "profile as --headless."
+            'Discover and complete earn activities from '
+            'https://rewards.bing.com/earn (daily set, explore, polls, quizzes) '
+            'instead of searches. Requires selenium; uses the same persistent '
+            'profile as --headless.'
         ),
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "--daily-set-only",
-        help="With --earn, only complete daily-set quiz/poll items",
+        '--daily-set-only',
+        help='With --earn, only complete daily-set quiz/poll items',
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "--explore-only",
-        help="With --earn, only complete explore click-through cards",
+        '--explore-only',
+        help='With --earn, only complete explore click-through cards',
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "--earn-headed",
-        help="Run the --earn browser visibly (for debugging)",
+        '--earn-headed',
+        help='Run the --earn browser visibly (for debugging)',
         action=BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
-        "--earn-delay",
-        help=(
-            "Override the time between earn activities in seconds. Defaults to --search-delay."
-        ),
-        metavar="SEC",
+        '--earn-delay',
+        help=('Override the time between earn activities in seconds. Defaults to --search-delay.'),
+        metavar='SEC',
         type=float,
     )
     p.add_argument(
-        "--backend",
+        '--backend',
         help=(
-            "Search backend: auto (selenium with pynput fallback), selenium, "
-            "pynput, or api (browserless, opt-in). Default: auto."
+            'Search backend: auto (selenium with pynput fallback), selenium, '
+            'pynput, or api (browserless, opt-in). Default: auto.'
         ),
-        choices=["auto", "selenium", "pynput", "api"],
-        default="auto",
+        choices=['auto', 'selenium', 'pynput', 'api'],
+        default='auto',
     )
     p.add_argument(
-        "--points",
-        help=(
-            "Read the rewards snapshot (points, quotas, streaks) and exit without searching."
-        ),
-        action="store_true",
+        '--points',
+        help=('Read the rewards snapshot (points, quotas, streaks) and exit without searching.'),
+        action='store_true',
     )
     p.add_argument(
-        "--json",
-        help="Emit the run summary as JSON on stdout instead of plain text.",
-        action="store_true",
+        '--json',
+        help='Emit the run summary as JSON on stdout instead of plain text.',
+        action='store_true',
     )
     p.add_argument(
-        "--log-level",
-        help="Logging level: critical, error, warning, info, debug. Default: info.",
-        choices=["critical", "error", "warning", "info", "debug"],
-        default="info",
+        '--log-level',
+        help='Logging level: critical, error, warning, info, debug. Default: info.',
+        choices=['critical', 'error', 'warning', 'info', 'debug'],
+        default='info',
     )
     p.add_argument(
-        "--log-file",
-        help="Optional path to a file to also write log output to.",
+        '--log-file',
+        help='Optional path to a file to also write log output to.',
         type=str,
     )
     p.add_argument(
-        "--cookies-file",
+        '--cookies-file',
         help=(
-            "Optional JSON file with session cookies (name->value) for "
-            "authenticated dashboard reads (--points) or --backend api."
+            'Optional JSON file with session cookies (name->value) for '
+            'authenticated dashboard reads (--points) or --backend api.'
         ),
         type=str,
     )
     p.add_argument(
-        "--max-searches",
-        help="Hard cap on the total number of searches across all profiles.",
+        '--max-searches',
+        help='Hard cap on the total number of searches across all profiles.',
         type=int,
     )
     p.add_argument(
-        "--run-on-zero-points",
+        '--run-on-zero-points',
         help=(
-            "Exit with code 0 even when no points were earned. Default: exit code 2 on zero points."
+            'Exit with code 0 even when no points were earned. Default: exit code 2 on zero points.'
         ),
         action=BooleanOptionalAction,
         default=False,
@@ -342,16 +338,16 @@ def valid_range(value: str) -> float | tuple[float, float]:
     --search-delay 10,45
     --search-delay 20
     """
-    match value.split(","):
+    match value.split(','):
         case [sec] if sec.isdecimal():
             return float(sec)
         case [min, max] if min.isdecimal() and max.isdecimal():
             min_s, max_s = float(min), float(max)
             if max_s <= min_s:
-                raise ArgumentTypeError("Max delay should be greater than min.")
+                raise ArgumentTypeError('Max delay should be greater than min.')
             return min_s, max_s
         case _:
-            raise ArgumentTypeError("Invalid format. Use numeric value or range.")
+            raise ArgumentTypeError('Invalid format. Use numeric value or range.')
 
 
 def resolve_delay(value: object) -> float:
@@ -381,7 +377,7 @@ def resolve_earn_delay(options: Namespace) -> float:
     ``options.search_delay`` so earn activity pacing matches search pacing
     unless explicitly overridden.
     """
-    earn_delay = getattr(options, "earn_delay", None)
+    earn_delay = getattr(options, 'earn_delay', None)
     if earn_delay is not None:
         return resolve_delay(earn_delay)
     return resolve_delay(options.search_delay)
@@ -392,7 +388,7 @@ def valid_file(path: str) -> Path:
     exe = Path(path)
     if exe.is_file():
         return exe
-    raise ArgumentTypeError(f"file not found: {path}")
+    raise ArgumentTypeError(f'file not found: {path}')
 
 
 def config_location() -> Path:
@@ -404,13 +400,18 @@ def config_location() -> Path:
     """
     # Config file in .config or APPDATA on Windows
     config_home = Path(
-        os.environ.get("APPDATA")
-        or os.environ.get("XDG_CONFIG_HOME")
-        or Path(os.environ["HOME"], ".config"),
-        "bing-rewards",
+        os.environ.get('APPDATA')
+        or os.environ.get('XDG_CONFIG_HOME')
+        or Path(os.environ['HOME'], '.config'),
+        'bing-rewards',
     )
 
-    return config_home.joinpath("config.json")
+    return config_home.joinpath('config.json')
+
+
+def cookies_location() -> Path:
+    """Default path for the session cookie file written by --setup-login."""
+    return config_location().parent / 'cookies.json'
 
 
 def read_config() -> Config:
@@ -419,10 +420,10 @@ def read_config() -> Config:
 
     if not config_file.is_file():
         # Make directories and default config if it doesn't exist
-        print(f"Generating config at {config_file}")
+        print(f'Generating config at {config_file}')
         config_file.parent.mkdir(parents=True, exist_ok=True)
         default_options = Config()
-        with config_file.open("x") as f:
+        with config_file.open('x') as f:
             json.dump(dataclasses.asdict(default_options), f, indent=2)
         return default_options
 
@@ -433,7 +434,7 @@ def read_config() -> Config:
             config = json.load(f)
         except json.decoder.JSONDecodeError as e:
             print(e)
-            print("Config JSON format error. Reverting to default.")
+            print('Config JSON format error. Reverting to default.')
     # return dataclass with values from config taking priority.
     # Ignore unknown keys so stale config files (e.g. from removed options)
     # don't crash startup; defaults apply for anything missing.
