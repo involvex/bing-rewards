@@ -17,7 +17,7 @@ wheels = [
 
 [[package]]
 name = "bing-rewards"
-version = "3.3.0"
+version = "3.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "pynput" },
