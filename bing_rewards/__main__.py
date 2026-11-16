@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from bing_rewards.app import main
+from bing_rewards.cli import main
 
 # __main__ module enabled running as `python -m bing_rewards`
 # This is not recommended

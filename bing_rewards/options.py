@@ -7,6 +7,7 @@
 import dataclasses
 import json
 import os
+import random
 import sys
 from argparse import (
     ArgumentParser,
@@ -31,6 +32,9 @@ MOBILE_COUNT = 23
 
 # Time to allow Chrome to load in seconds
 LOAD_DELAY = 1.5
+
+# Default WebDriver wait timeout in seconds
+WEBDRIVER_TIMEOUT = 10.0
 
 # Time between searches in seconds
 # Searches may not be counted if done too quickly
@@ -61,6 +65,7 @@ class Config:
     desktop_count: int = DESKTOP_COUNT
     mobile_count: int = MOBILE_COUNT
     load_delay: float = LOAD_DELAY
+    timeout: float = WEBDRIVER_TIMEOUT
     search_delay: float | tuple[float, float] = SEARCH_DELAY
     search_url: str = URL
     desktop_agent: str = DESKTOP_AGENT
@@ -81,6 +86,27 @@ class Config:
     daily_set_only: bool = False
     explore_only: bool = False
     earn_headed: bool = False
+    # Delay between earn activities (seconds). None = fall back to search_delay.
+    earn_delay: float | None = None
+    # Search backend: 'auto' (selenium, pynput fallback), 'selenium', 'pynput', 'api'.
+    backend: str = "auto"
+    # Browser window size (width,height) for Selenium runs.
+    window_size: str = "1280,720"
+    # Only read the rewards snapshot and exit (no searches).
+    points: bool = False
+    # Emit the run summary as JSON on stdout.
+    json: bool = False
+    # Logging level: critical, error, warning, info, debug.
+    log_level: str = "info"
+    # Optional file to write log output to.
+    log_file: str | None = None
+    # Optional JSON file with session cookies (name→value) for authenticated
+    # dashboard reads (--points) or the browserless API backend.
+    cookies_file: str | None = None
+    # Hard cap on total searches across all profiles/modes.
+    max_searches: int | None = None
+    # Keep exiting with code 2 when no points were earned instead of success.
+    run_on_zero_points: bool = False
 
 
 def parse_args() -> Namespace:
@@ -244,6 +270,67 @@ def parse_args() -> Namespace:
         action=BooleanOptionalAction,
         default=None,
     )
+    p.add_argument(
+        "--earn-delay",
+        help=(
+            "Override the time between earn activities in seconds. Defaults to --search-delay."
+        ),
+        metavar="SEC",
+        type=float,
+    )
+    p.add_argument(
+        "--backend",
+        help=(
+            "Search backend: auto (selenium with pynput fallback), selenium, "
+            "pynput, or api (browserless, opt-in). Default: auto."
+        ),
+        choices=["auto", "selenium", "pynput", "api"],
+        default="auto",
+    )
+    p.add_argument(
+        "--points",
+        help=(
+            "Read the rewards snapshot (points, quotas, streaks) and exit without searching."
+        ),
+        action="store_true",
+    )
+    p.add_argument(
+        "--json",
+        help="Emit the run summary as JSON on stdout instead of plain text.",
+        action="store_true",
+    )
+    p.add_argument(
+        "--log-level",
+        help="Logging level: critical, error, warning, info, debug. Default: info.",
+        choices=["critical", "error", "warning", "info", "debug"],
+        default="info",
+    )
+    p.add_argument(
+        "--log-file",
+        help="Optional path to a file to also write log output to.",
+        type=str,
+    )
+    p.add_argument(
+        "--cookies-file",
+        help=(
+            "Optional JSON file with session cookies (name->value) for "
+            "authenticated dashboard reads (--points) or --backend api."
+        ),
+        type=str,
+    )
+    p.add_argument(
+        "--max-searches",
+        help="Hard cap on the total number of searches across all profiles.",
+        type=int,
+    )
+    p.add_argument(
+        "--run-on-zero-points",
+        help=(
+            "Exit with code 0 even when no points were earned. Default: exit code 2 on zero points."
+        ),
+        action=BooleanOptionalAction,
+        default=False,
+    )
     args = p.parse_args()
     return args
 
@@ -267,12 +354,45 @@ def valid_range(value: str) -> float | tuple[float, float]:
             raise ArgumentTypeError("Invalid format. Use numeric value or range.")
 
 
+def resolve_delay(value: object) -> float:
+    """Resolve a delay config value to a single delay in seconds.
+
+    Accepts an int, a float, a single-element sequence ``[x]`` / ``(x,)``, or
+    a two-element sequence ``[min, max]`` / ``(min, max)`` which resolves to a
+    uniform random value in that range.
+    """
+    match value:
+        case int() as x:
+            return float(x)
+        case float() as x:
+            return float(x)
+        case [x] | (x,):
+            return resolve_delay(x)
+        case [min_s, max_s] | (min_s, max_s):
+            return random.uniform(resolve_delay(min_s), resolve_delay(max_s))
+        case other:
+            raise ValueError(f'Invalid configuration format: "search_delay": {other!r}')
+
+
+def resolve_earn_delay(options: Namespace) -> float:
+    """Resolve the earn delay for a run.
+
+    Uses ``options.earn_delay`` when set, otherwise falls back to
+    ``options.search_delay`` so earn activity pacing matches search pacing
+    unless explicitly overridden.
+    """
+    earn_delay = getattr(options, "earn_delay", None)
+    if earn_delay is not None:
+        return resolve_delay(earn_delay)
+    return resolve_delay(options.search_delay)
+
+
 def valid_file(path: str) -> Path:
-    """Check that a string is a file and exists handler for the --exe= flag."""
+    """Check that a string is an existing file; handler for the --exe= flag."""
     exe = Path(path)
-    if exe.is_file:
+    if exe.is_file():
         return exe
-    raise FileNotFoundError(path)
+    raise ArgumentTypeError(f"file not found: {path}")
 
 
 def config_location() -> Path:
