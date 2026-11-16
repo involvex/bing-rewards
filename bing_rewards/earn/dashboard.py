@@ -17,44 +17,42 @@ import re
 from bing_rewards.earn.models import EarnOffer
 from bing_rewards.util import _as_mapping, _first_int
 
-_POINTS_RE = re.compile(r"(\d+)\s*pts?", re.IGNORECASE)
+_POINTS_RE = re.compile(r'(\d+)\s*pts?', re.IGNORECASE)
 
 
 def _parse_points(text: str) -> int:
-    m = _POINTS_RE.search(text or "")
+    m = _POINTS_RE.search(text or '')
     return int(m.group(1)) if m else 0
 
 
-def _parse_offer(raw: object, date: str = "") -> EarnOffer | None:
+def _parse_offer(raw: object, date: str = '') -> EarnOffer | None:
     """Build an :class:`EarnOffer` from one raw dashboard offer object."""
     data = _as_mapping(raw)
     if not data:
         return None
 
-    offer_id = data.get("offerId") or data.get("id") or data.get("hash") or ""
+    offer_id = data.get('offerId') or data.get('id') or data.get('hash') or ''
     if not offer_id:
         return None
 
-    title = str(data.get("title") or data.get("linkText") or "").strip()
-    description = str(
-        data.get("description") or data.get("extBannerDescription") or ""
-    ).strip()
+    title = str(data.get('title') or data.get('linkText') or '').strip()
+    description = str(data.get('description') or data.get('extBannerDescription') or '').strip()
     destination_url = str(
-        data.get("destinationUrl") or data.get("destination") or data.get("url") or ""
+        data.get('destinationUrl') or data.get('destination') or data.get('url') or ''
     ).strip()
 
-    points = _first_int(data.get("pointProgress") or 0)
-    points_max = _first_int(data.get("pointProgressMax") or 0)
+    points = _first_int(data.get('pointProgress') or 0)
+    points_max = _first_int(data.get('pointProgressMax') or 0)
     if points_max == 0:
         # Fall back to the linkText badge ("10 points").
-        points_max = _parse_points(data.get("linkText") or data.get("title") or "")
+        points_max = _parse_points(data.get('linkText') or data.get('title') or '')
         if points_max and points == 0:
-            points = points_max if data.get("complete") else 0
+            points = points_max if data.get('complete') else 0
 
-    offer_type = str(data.get("type") or data.get("promotionType") or "").strip()
-    state = str(data.get("state") or "").strip()
-    complete = bool(data.get("complete"))
-    hash_ = str(data.get("hash") or "").strip()
+    offer_type = str(data.get('type') or data.get('promotionType') or '').strip()
+    state = str(data.get('state') or '').strip()
+    complete = bool(data.get('complete'))
+    hash_ = str(data.get('hash') or '').strip()
 
     return EarnOffer(
         offer_id=offer_id,
@@ -118,17 +116,17 @@ def parse_earn_offers(raw: object) -> list[EarnOffer]:
     if not isinstance(raw, dict):
         return []
 
-    daily_set = parse_daily_set_promotions(raw.get("dailySetPromotions") or {})
+    daily_set = parse_daily_set_promotions(raw.get('dailySetPromotions') or {})
 
     # Top-level promotion-like buckets that may contain completable offers.
     promotion_buckets = (
-        raw.get("counters")
+        raw.get('counters')
         or {}
-        or raw.get("shopAndEarn")
+        or raw.get('shopAndEarn')
         or []
-        or raw.get("activityAndQuiz")
+        or raw.get('activityAndQuiz')
         or []
-        or raw.get("dailyPoint")
+        or raw.get('dailyPoint')
         or []
     )
     top_level = parse_promotions(promotion_buckets)

@@ -20,15 +20,15 @@ class EarnOffer:
 
     offer_id: str
     title: str
-    description: str = ""
-    destination_url: str = ""
+    description: str = ''
+    destination_url: str = ''
     points: int = 0
     points_max: int = 0
-    offer_type: str = ""  # urlreward | quiz | poll | purchase | search | ...
-    state: str = "incomplete"  # incomplete | complete | locked
+    offer_type: str = ''  # urlreward | quiz | poll | purchase | search | ...
+    state: str = 'incomplete'  # incomplete | complete | locked
     complete: bool = False
-    date: str = ""  # daily-set date (MM/DD/YYYY) when from dailySetPromotions
-    hash: str = ""  # activity hash usable with reportActivity
+    date: str = ''  # daily-set date (MM/DD/YYYY) when from dailySetPromotions
+    hash: str = ''  # activity hash usable with reportActivity
 
     @property
     def points_remaining(self) -> int:
@@ -36,11 +36,11 @@ class EarnOffer:
 
     @property
     def is_complete(self) -> bool:
-        return self.complete or self.state.lower() in ("complete", "completed")
+        return self.complete or self.state.lower() in ('complete', 'completed')
 
     @property
     def is_locked(self) -> bool:
-        return self.state.lower() in ("locked",)
+        return self.state.lower() in ('locked',)
 
     @property
     def is_reportable(self) -> bool:
@@ -49,20 +49,20 @@ class EarnOffer:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "offer_id": self.offer_id,
-            "title": self.title,
-            "description": self.description,
-            "destination_url": self.destination_url,
-            "points": self.points,
-            "points_max": self.points_max,
-            "offer_type": self.offer_type,
-            "state": self.state,
-            "complete": self.complete,
-            "date": self.date,
-            "hash": self.hash,
-            "is_complete": self.is_complete,
-            "is_locked": self.is_locked,
-            "is_reportable": self.is_reportable,
+            'offer_id': self.offer_id,
+            'title': self.title,
+            'description': self.description,
+            'destination_url': self.destination_url,
+            'points': self.points,
+            'points_max': self.points_max,
+            'offer_type': self.offer_type,
+            'state': self.state,
+            'complete': self.complete,
+            'date': self.date,
+            'hash': self.hash,
+            'is_complete': self.is_complete,
+            'is_locked': self.is_locked,
+            'is_reportable': self.is_reportable,
         }
 
 
@@ -81,9 +81,9 @@ class EarnReport:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "completed": list(self.completed),
-            "skipped": list(self.skipped),
-            "failed": list(self.failed),
-            "points_earned": self.points_earned,
-            "total": self.total,
+            'completed': list(self.completed),
+            'skipped': list(self.skipped),
+            'failed': list(self.failed),
+            'points_earned': self.points_earned,
+            'total': self.total,
         }

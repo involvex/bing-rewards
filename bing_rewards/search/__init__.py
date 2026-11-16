@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from collections.abc import Iterator
 
-log = get_logger("search")
+log = get_logger('search')
 
 
 def perform_searches(
@@ -34,21 +34,21 @@ def perform_searches(
     setups keep working without ``--setup-login``.
     """
     backend = resolve_backend(options)
-    if backend == "api":
+    if backend == 'api':
         return api.search(count, words, agent, options, profile)
 
-    if backend == "selenium":
+    if backend == 'selenium':
         try:
             return selenium.search(count, words, agent, options, profile)
         except login.LoginRequiredError as e:
             fallback_allowed = (
-                str(getattr(options, "backend", "auto")).lower() == "auto"
-                and not getattr(options, "headless", False)
-                and not getattr(options, "dryrun", False)
+                str(getattr(options, 'backend', 'auto')).lower() == 'auto'
+                and not getattr(options, 'headless', False)
+                and not getattr(options, 'dryrun', False)
             )
             if not fallback_allowed:
                 raise
-            log.warning("%s Falling back to keyboard typing (pynput).", e)
+            log.warning('%s Falling back to keyboard typing (pynput).', e)
             return pynput.search(count, words, agent, options, profile)
 
     return pynput.search(count, words, agent, options, profile)

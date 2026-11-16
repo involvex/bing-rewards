@@ -14,14 +14,14 @@ from bing_rewards.report import QuotaStats
 if TYPE_CHECKING:
     from argparse import Namespace
 
-BACKENDS = ("auto", "pynput", "selenium", "api")
+BACKENDS = ('auto', 'pynput', 'selenium', 'api')
 
 
 @dataclass(slots=True)
 class SearchOutcome:
     """What one desktop or mobile search pass achieved."""
 
-    backend: str = ""
+    backend: str = ''
     searches: int = 0
     points_before: int | None = None
     points_after: int | None = None
@@ -43,7 +43,7 @@ def resolve_backend(options: Namespace) -> str:
     profile) and falls back to the legacy pynput typing only when the
     persistent profile is not signed in.
     """
-    backend = str(getattr(options, "backend", "auto")).lower()
-    if backend in ("pynput", "selenium", "api"):
+    backend = str(getattr(options, 'backend', 'auto')).lower()
+    if backend in ('pynput', 'selenium', 'api'):
         return backend
-    return "selenium"
+    return 'selenium'

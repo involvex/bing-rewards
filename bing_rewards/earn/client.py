@@ -31,16 +31,16 @@ from bing_rewards.rewards.http import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-log = get_logger("earn.client")
+log = get_logger('earn.client')
 
-REWARDS_URL = f"{BING_ORIGIN}/"
+REWARDS_URL = f'{BING_ORIGIN}/'
 
 # Offer types whose points are awarded on page view (no quiz answers needed).
-PAGE_VIEW_TYPES = frozenset({"urlreward", "search", "purchase", "checkin"})
+PAGE_VIEW_TYPES = frozenset({'urlreward', 'search', 'purchase', 'checkin'})
 
 # Offer types requiring user input (quiz answers / poll choice) — skipped by
 # default unless they carry a reportable hash.
-INPUT_TYPES = frozenset({"quiz", "poll", "trivia"})
+INPUT_TYPES = frozenset({'quiz', 'poll', 'trivia'})
 
 
 def _new_guid() -> str:
@@ -54,7 +54,7 @@ class EarnClient:
     def __init__(
         self,
         http: RewardsHttp,
-        user_agent: str = "",
+        user_agent: str = '',
         earn_delay: float | None = None,
     ) -> None:
         self.http = http
@@ -69,10 +69,10 @@ class EarnClient:
     def _activity_type(self, offer: EarnOffer) -> str:
         t = offer.offer_type.lower()
         if t in PAGE_VIEW_TYPES:
-            return "UrlReward"
+            return 'UrlReward'
         if t in INPUT_TYPES:
             return t.capitalize()
-        return "Activity"
+        return 'Activity'
 
     def run(self, offers: Iterator[EarnOffer], dryrun: bool = False) -> EarnReport:
         """Complete each reportable offer; return an :class:`EarnReport`."""
@@ -80,14 +80,14 @@ class EarnClient:
 
         for offer in offers:
             if offer.is_complete:
-                report.skipped.append(f"{offer.title} (already complete)")
+                report.skipped.append(f'{offer.title} (already complete)')
                 continue
             if offer.is_locked:
-                report.skipped.append(f"{offer.title} (locked)")
+                report.skipped.append(f'{offer.title} (locked)')
                 continue
 
             if dryrun:
-                log.info("Earn [%s]: %s (dryrun)", offer.offer_type, offer.title)
+                log.info('Earn [%s]: %s (dryrun)', offer.offer_type, offer.title)
                 report.completed.append(offer.title)
                 continue
 
@@ -95,28 +95,24 @@ class EarnClient:
             if ok:
                 report.completed.append(offer.title)
                 report.points_earned += offer.points_remaining
-                log.info(
-                    "Earn completed: %s (%d pts)", offer.title, offer.points_remaining
-                )
+                log.info('Earn completed: %s (%d pts)', offer.title, offer.points_remaining)
             else:
                 report.failed.append(offer.title)
-                log.warning("Earn failed: %s", offer.title)
+                log.warning('Earn failed: %s', offer.title)
             time.sleep(self._delay())
 
         return report
 
     def _complete_one(self, offer: EarnOffer) -> bool:
         """Complete a single offer. Returns True on success."""
-        log.info("Earn [%s/%spts]: %s", offer.offer_type, offer.points_max, offer.title)
+        log.info('Earn [%s/%spts]: %s', offer.offer_type, offer.points_max, offer.title)
 
         # Non-reportable offers (complete, locked, or no hash) never complete.
         if not offer.is_reportable:
             if offer.offer_type.lower() in INPUT_TYPES:
-                log.info(
-                    "  skipped (requires input, no reportable hash): %s", offer.title
-                )
+                log.info('  skipped (requires input, no reportable hash): %s', offer.title)
             else:
-                log.info("  skipped (no reportable hash): %s", offer.title)
+                log.info('  skipped (no reportable hash): %s', offer.title)
             return False
 
         # 1) Visit the destination URL to establish the session/cvid.
@@ -124,28 +120,28 @@ class EarnClient:
             try:
                 self.http.get(offer.destination_url)
             except RewardsHttpError as e:
-                log.warning("  failed to open destination: %s", e)
+                log.warning('  failed to open destination: %s', e)
                 # Continue to reportActivity anyway — some offers accept a
                 # direct activity report without a prior page visit.
             except Exception as e:  # noqa: BLE001 - network is flaky
-                log.warning("  failed to open destination: %s", e)
+                log.warning('  failed to open destination: %s', e)
 
         # 2) Report the activity to Microsoft Rewards.
         try:
             self.http.get(
                 REPORT_ACTIVITY_URL,
                 query_params={
-                    "IG": _new_guid(),
-                    "activityType": self._activity_type(offer),
-                    "activityId": offer.hash,
-                    "cvid": _new_guid(),
+                    'IG': _new_guid(),
+                    'activityType': self._activity_type(offer),
+                    'activityId': offer.hash,
+                    'cvid': _new_guid(),
                 },
             )
         except RewardsHttpError as e:
-            log.warning("  reportActivity failed: %s", e)
+            log.warning('  reportActivity failed: %s', e)
             return False
         except Exception as e:  # noqa: BLE001 - network is flaky
-            log.warning("  reportActivity failed: %s", e)
+            log.warning('  reportActivity failed: %s', e)
             return False
 
         return True

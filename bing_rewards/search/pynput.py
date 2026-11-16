@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from collections.abc import Iterator
 
-log = get_logger("search.pynput")
+log = get_logger('search.pynput')
 
 
 def search(
@@ -38,7 +38,7 @@ def search(
     Opens a browser window with user-agent `agent`, completes `count`
     searches from `words`, and terminates the browser process on completion.
     """
-    outcome = SearchOutcome(backend="pynput")
+    outcome = SearchOutcome(backend='pynput')
     chrome = None
     if not options.no_window and not options.dryrun:
         cmd = browser_cmd(options.browser_path, agent, profile)
@@ -52,21 +52,19 @@ def search(
 
         # Ctrl + E opens the address bar with the default search engine;
         # Alt + D focuses the address bar without using the search engine.
-        key_mod, key = (Key.ctrl, "e") if options.bing else (Key.alt, "d")
+        key_mod, key = (Key.ctrl, 'e') if options.bing else (Key.alt, 'd')
 
         for i in range(count):
             query = next(words)
 
             # If the default search engine is Bing, type the query directly
             # into the address bar. Otherwise build the bing.com search url.
-            search_url = (
-                query if options.bing else options.search_url + quote_plus(query)
-            )
+            search_url = query if options.bing else options.search_url + quote_plus(query)
 
             if not options.dryrun:
                 _type_query(key_controller, key_mod, key, search_url, options)
 
-            log.info("Search %d: %s", i + 1, query)
+            log.info('Search %d: %s', i + 1, query)
             outcome.searches += 1
             time.sleep(resolve_delay(options.search_delay))
 
@@ -96,10 +94,10 @@ def _type_query(
     time.sleep(0.08)
 
     # Type the url into the address bar with a 30ms delay between keystrokes
-    for char in search_url + "\n":
+    for char in search_url + '\n':
         key_controller.tap(char)
         time.sleep(0.03)
     key_controller.tap(Key.enter)
 
 
-__all__ = ["QuotaStats", "search"]
+__all__ = ['QuotaStats', 'search']

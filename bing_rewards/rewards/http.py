@@ -26,50 +26,50 @@ from bing_rewards.log import get_logger
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-log = get_logger("rewards.http")
+log = get_logger('rewards.http')
 
-REWARDS_ORIGIN = "https://rewards.bing.com"
-PLATFORM_ORIGIN = "https://prod.rewardsplatform.microsoft.com"
-BING_ORIGIN = "https://www.bing.com"
+REWARDS_ORIGIN = 'https://rewards.bing.com'
+PLATFORM_ORIGIN = 'https://prod.rewardsplatform.microsoft.com'
+BING_ORIGIN = 'https://www.bing.com'
 
 # Microsoft dashboards: options=613 is the bitmask observed in the TS port.
-DAPI_ME_URL = f"{PLATFORM_ORIGIN}/dapi/me?channel=&options=613"
-PANELFLYOUT_URL = f"{BING_ORIGIN}/rewards/panelflyout/getuserinfo"
-GETUSERINFO_URL = f"{REWARDS_ORIGIN}/api/getuserinfo"
+DAPI_ME_URL = f'{PLATFORM_ORIGIN}/dapi/me?channel=&options=613'
+PANELFLYOUT_URL = f'{BING_ORIGIN}/rewards/panelflyout/getuserinfo'
+GETUSERINFO_URL = f'{REWARDS_ORIGIN}/api/getuserinfo'
 # Browserless search-activity reporting endpoint used by --backend api.
-REPORT_ACTIVITY_URL = f"{BING_ORIGIN}/rewardsapp/reportActivity"
+REPORT_ACTIVITY_URL = f'{BING_ORIGIN}/rewardsapp/reportActivity'
 
 HEADERS_JSON = {
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": f"{REWARDS_ORIGIN}/",
-    "Origin": REWARDS_ORIGIN,
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': f'{REWARDS_ORIGIN}/',
+    'Origin': REWARDS_ORIGIN,
 }
 
 # Headers a browser owns; never send them from urllib3.
 BROWSER_OWNED_HEADERS = frozenset(
     {
-        "accept-charset",
-        "accept-encoding",
-        "access-control-request-headers",
-        "access-control-request-method",
-        "connection",
-        "content-length",
-        "cookie",
-        "date",
-        "dnt",
-        "expect",
-        "host",
-        "keep-alive",
-        "origin",
-        "permissions-policy",
-        "referer",
-        "te",
-        "trailer",
-        "transfer-encoding",
-        "upgrade",
-        "user-agent",
-        "via",
+        'accept-charset',
+        'accept-encoding',
+        'access-control-request-headers',
+        'access-control-request-method',
+        'connection',
+        'content-length',
+        'cookie',
+        'date',
+        'dnt',
+        'expect',
+        'host',
+        'keep-alive',
+        'origin',
+        'permissions-policy',
+        'referer',
+        'te',
+        'trailer',
+        'transfer-encoding',
+        'upgrade',
+        'user-agent',
+        'via',
     }
 )
 
@@ -91,30 +91,28 @@ def load_cookies(path: str | Path) -> dict[str, str]:
     let the OS ACLs enforce access.
     """
     p = Path(path)
-    if os.name == "posix":
+    if os.name == 'posix':
         mode = stat.S_IMODE(p.stat().st_mode)
         if mode & 0o077:
             raise ValueError(
-                f"cookie file {p} is readable by others ({oct(mode)}); "
-                "chmod 600 it or use a more private location"
+                f'cookie file {p} is readable by others ({oct(mode)}); '
+                'chmod 600 it or use a more private location'
             )
-    with p.open("r", encoding="utf-8") as f:
+    with p.open('r', encoding='utf-8') as f:
         data = json.load(f)
     if isinstance(data, dict):
         return {str(k): str(v) for k, v in data.items()}
     # List of {name, value} dicts (Netscape-ish / Playwright shape).
     if not isinstance(data, list):
-        raise TypeError(
-            f"cookie file {p} must contain a JSON object or list of objects"
-        )
+        raise TypeError(f'cookie file {p} must contain a JSON object or list of objects')
     cookies: dict[str, str] = {}
     for item in data:
         if not isinstance(item, dict):
-            raise TypeError(f"cookie file {p} contains a non-object entry")
+            raise TypeError(f'cookie file {p} contains a non-object entry')
         try:
-            cookies[str(item["name"])] = str(item["value"])
+            cookies[str(item['name'])] = str(item['value'])
         except KeyError as e:
-            raise ValueError(f"cookie file {p} entry missing required key: {e}") from e
+            raise ValueError(f'cookie file {p} entry missing required key: {e}') from e
     return cookies
 
 
@@ -127,12 +125,12 @@ def save_cookies(cookies: Mapping[str, str], path: str | Path) -> None:
     p = Path(path)
     data = dict(cookies)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w", encoding="utf-8") as f:
+    with p.open('w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
     try:
         p.chmod(0o600)
     except OSError:
-        log.debug("Could not set restrictive permissions on %s", p)
+        log.debug('Could not set restrictive permissions on %s', p)
 
 
 class RewardsHttp:
@@ -141,7 +139,7 @@ class RewardsHttp:
     def __init__(
         self,
         cookies: dict[str, str] | None = None,
-        user_agent: str = "",
+        user_agent: str = '',
         timeout_s: float = 15.0,
     ) -> None:
         self._http = urllib3.PoolManager(
@@ -152,17 +150,13 @@ class RewardsHttp:
                 status_forcelist=[429, 500, 502, 503, 504],
                 redirect=5,
             ),
-            headers={"User-Agent": user_agent} if user_agent else None,
+            headers={'User-Agent': user_agent} if user_agent else None,
         )
         self.cookies = dict(cookies or {})
 
     @property
     def cookie_header(self) -> str:
-        return (
-            "; ".join(f"{k}={v}" for k, v in self.cookies.items())
-            if self.cookies
-            else ""
-        )
+        return '; '.join(f'{k}={v}' for k, v in self.cookies.items()) if self.cookies else ''
 
     def _request(
         self,
@@ -175,30 +169,28 @@ class RewardsHttp:
     ) -> urllib3.HTTPResponse:
         merged = dict(HEADERS_JSON)
         if self.cookie_header:
-            merged["Cookie"] = self.cookie_header
+            merged['Cookie'] = self.cookie_header
         if headers:
             merged.update(_sanitize_headers(headers))
         merged = _sanitize_headers(merged)
 
         encoded_body: bytes | None = None
         if body is not None:
-            encoded_body = body if isinstance(body, bytes) else body.encode("utf-8")
-            merged.setdefault("Content-Type", "application/x-www-form-urlencoded")
+            encoded_body = body if isinstance(body, bytes) else body.encode('utf-8')
+            merged.setdefault('Content-Type', 'application/x-www-form-urlencoded')
 
         if query_params:
             url = (
-                f"{url}&{urlencode(query_params)}"
-                if "?" in url
-                else f"{url}?{urlencode(query_params)}"
+                f'{url}&{urlencode(query_params)}'
+                if '?' in url
+                else f'{url}?{urlencode(query_params)}'
             )
 
-        log.debug("%s %s", method, url)
+        log.debug('%s %s', method, url)
         return self._http.request(method, url, headers=merged, body=encoded_body)
 
-    def get(
-        self, url: str, headers: dict[str, str] | None = None
-    ) -> urllib3.HTTPResponse:
-        return self._request("GET", url, headers=headers)
+    def get(self, url: str, headers: dict[str, str] | None = None) -> urllib3.HTTPResponse:
+        return self._request('GET', url, headers=headers)
 
     def post(
         self,
@@ -208,15 +200,15 @@ class RewardsHttp:
     ) -> urllib3.HTTPResponse:
         body = None
         if data:
-            body = "&".join(f"{k}={v}" for k, v in data.items())
-        return self._request("POST", url, headers=headers, body=body)
+            body = '&'.join(f'{k}={v}' for k, v in data.items())
+        return self._request('POST', url, headers=headers, body=body)
 
     def json_get(self, url: str, headers: dict[str, str] | None = None) -> object:
         """GET and parse JSON, raising :class:`RewardsHttpError` on non-2xx."""
         resp = self.get(url, headers=headers)
         if not 200 <= resp.status < 300:  # noqa: PLR2004 - HTTP 2xx range check
-            raise RewardsHttpError(f"{url} returned HTTP {resp.status}")
+            raise RewardsHttpError(f'{url} returned HTTP {resp.status}')
         try:
-            return json.loads(resp.data.decode("utf-8"))
+            return json.loads(resp.data.decode('utf-8'))
         except (ValueError, UnicodeDecodeError) as e:
-            raise RewardsHttpError(f"{url} returned invalid JSON: {e}") from e
+            raise RewardsHttpError(f'{url} returned invalid JSON: {e}') from e

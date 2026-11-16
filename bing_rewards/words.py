@@ -16,7 +16,7 @@ from bing_rewards.log import get_logger
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-log = get_logger("words")
+log = get_logger('words')
 
 
 def word_generator() -> Iterator[str]:
@@ -32,20 +32,20 @@ def word_generator() -> Iterator[str]:
     Raises:
         OSError: If there are issues accessing or reading the file.
     """
-    word_data = resources.files("bing_rewards").joinpath("data", "keywords.txt")
+    word_data = resources.files('bing_rewards').joinpath('data', 'keywords.txt')
 
     try:
         while True:
             with (
                 resources.as_file(word_data) as p,
-                p.open(mode="r", encoding="utf-8") as fh,
+                p.open(mode='r', encoding='utf-8') as fh,
             ):
                 # Get the file size of the keywords file
                 fh.seek(0, io.SEEK_END)
                 size = fh.tell()
 
                 if size == 0:
-                    raise ValueError("Keywords file is empty")
+                    raise ValueError('Keywords file is empty')
 
                 # Start at a random position in the stream
                 fh.seek(random.randint(0, size - 1), io.SEEK_SET)
@@ -66,8 +66,8 @@ def word_generator() -> Iterator[str]:
                     if stripped_line:
                         yield stripped_line
     except OSError as e:
-        log.error("Error accessing keywords file: %s", e)
+        log.error('Error accessing keywords file: %s', e)
         raise
     except ValueError as e:
-        log.error("Unexpected error in word generation: %s", e)
+        log.error('Unexpected error in word generation: %s', e)
         raise

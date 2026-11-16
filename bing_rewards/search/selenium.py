@@ -25,10 +25,10 @@ from bing_rewards.search.types import SearchOutcome
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-log = get_logger("search.selenium")
+log = get_logger('search.selenium')
 
-BING_HOME = "https://www.bing.com"
-SEARCH_BOX_ID = "sb_form_q"
+BING_HOME = 'https://www.bing.com'
+SEARCH_BOX_ID = 'sb_form_q'
 
 
 def search(
@@ -43,18 +43,18 @@ def search(
     Raises `LoginRequiredError` when the persistent profile is signed out,
     so the `auto` backend can fall back to keyboard typing.
     """
-    outcome = SearchOutcome(backend="selenium")
-    headed = not bool(getattr(options, "headless", False))
+    outcome = SearchOutcome(backend='selenium')
+    headed = not bool(getattr(options, 'headless', False))
 
     with chrome_driver(options, agent, headed=headed) as driver:
         wait = WebDriverWait(driver, options.timeout)
-        log.info("Using persistent profile %s", login.profile_dir_label(options))
+        log.info('Using persistent profile %s', login.profile_dir_label(options))
 
         for i in range(count):
             query = next(words)
 
             if options.dryrun:
-                log.info("Search %d: %s (dryrun)", i + 1, query)
+                log.info('Search %d: %s (dryrun)', i + 1, query)
                 outcome.searches += 1
                 time.sleep(resolve_delay(options.search_delay))
                 continue
@@ -62,32 +62,30 @@ def search(
             try:
                 driver.get(BING_HOME)
             except WebDriverException as e:
-                outcome.error = f"browser navigation failed: {e}"
-                log.error("%s", outcome.error)
+                outcome.error = f'browser navigation failed: {e}'
+                log.error('%s', outcome.error)
                 return outcome
             time.sleep(options.load_delay)
 
             if i == 0 and not login.bing_logged_in(driver):
                 raise login.LoginRequiredError(
                     f'Bing does not appear logged in (profile "{profile}"). '
-                    "Points will NOT count. Run once: bing-rewards --setup-login"
+                    'Points will NOT count. Run once: bing-rewards --setup-login'
                 )
 
             try:
                 search_box = wait.until(
-                    expected_conditions.presence_of_element_located(
-                        (By.ID, SEARCH_BOX_ID)
-                    )
+                    expected_conditions.presence_of_element_located((By.ID, SEARCH_BOX_ID))
                 )
                 search_box.clear()
                 search_box.send_keys(query)
                 search_box.send_keys(Keys.RETURN)
             except WebDriverException as e:
-                outcome.error = f"search input failed: {e}"
-                log.error("%s", outcome.error)
+                outcome.error = f'search input failed: {e}'
+                log.error('%s', outcome.error)
                 return outcome
 
-            log.info("Search %d: %s", i + 1, query)
+            log.info('Search %d: %s', i + 1, query)
             outcome.searches += 1
             time.sleep(resolve_delay(options.search_delay))
 

@@ -30,7 +30,7 @@ def _first_int(obj: object, default: int = 0) -> int:
             return default
         return int(obj)
     if isinstance(obj, str):
-        m = re.search(r"\d+", obj)
+        m = re.search(r'\d+', obj)
         return int(m.group(0)) if m else default
     return default
 

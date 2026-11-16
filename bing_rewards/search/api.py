@@ -35,9 +35,9 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from collections.abc import Iterator
 
-log = get_logger("search.api")
+log = get_logger('search.api')
 
-BING_SEARCH_URL = f"{BING_ORIGIN}/search"
+BING_SEARCH_URL = f'{BING_ORIGIN}/search'
 
 
 def _new_guid() -> str:
@@ -58,29 +58,27 @@ def search(
     are read from the dashboard snapshot (best-effort) so the report shows
     ``points_gained`` when the dashboard is reachable.
     """
-    outcome = SearchOutcome(backend="api")
+    outcome = SearchOutcome(backend='api')
 
     # Dryrun never touches the network, so no cookies file is required.
     if options.dryrun:
         for i in range(count):
             query = next(words)
-            log.info("Search %d: %s (dryrun)", i + 1, query)
+            log.info('Search %d: %s (dryrun)', i + 1, query)
             outcome.searches += 1
         outcome.complete = True
         return outcome
 
-    cookies_file = getattr(options, "cookies_file", None) or ""
+    cookies_file = getattr(options, 'cookies_file', None) or ''
     if not cookies_file:
-        outcome.error = (
-            f'--backend api requires --cookies-file <path> (profile "{profile}")'
-        )
+        outcome.error = f'--backend api requires --cookies-file <path> (profile "{profile}")'
         log.error(outcome.error)
         return outcome
 
     try:
         cookies = load_cookies(cookies_file)
     except (OSError, ValueError, TypeError) as e:
-        outcome.error = f"could not load cookies file {cookies_file}: {e}"
+        outcome.error = f'could not load cookies file {cookies_file}: {e}'
         log.error(outcome.error)
         return outcome
 
@@ -99,10 +97,10 @@ def search(
         try:
             http.get(
                 BING_SEARCH_URL,
-                query_params={"q": query, "cvid": cvid, "FORM": "ANNTA1"},
+                query_params={'q': query, 'cvid': cvid, 'FORM': 'ANNTA1'},
             )
         except RewardsHttpError as e:
-            outcome.error = f"search request failed: {e}"
+            outcome.error = f'search request failed: {e}'
             log.error(outcome.error)
             break
 
@@ -112,18 +110,18 @@ def search(
             http.get(
                 REPORT_ACTIVITY_URL,
                 query_params={
-                    "IG": ig,
-                    "activityType": "Search",
-                    "activityId": activity_id,
-                    "cvid": cvid,
+                    'IG': ig,
+                    'activityType': 'Search',
+                    'activityId': activity_id,
+                    'cvid': cvid,
                 },
             )
         except RewardsHttpError as e:
-            outcome.error = f"reportActivity failed: {e}"
+            outcome.error = f'reportActivity failed: {e}'
             log.error(outcome.error)
             break
 
-        log.info("Search %d: %s", i + 1, query)
+        log.info('Search %d: %s', i + 1, query)
         outcome.searches += 1
         time.sleep(resolve_delay(options.search_delay))
 
@@ -141,6 +139,6 @@ def _points(http: RewardsHttp) -> int | None:
         client = RewardsClient(http=http)
         snapshot = client.fetch_snapshot()
     except RewardsHttpError as e:
-        log.debug("points read-out skipped: %s", e)
+        log.debug('points read-out skipped: %s', e)
         return None
     return snapshot.available_points or None

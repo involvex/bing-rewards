@@ -10,12 +10,12 @@ import json
 import time
 from dataclasses import dataclass, field
 
-STATUS_COMPLETED = "completed"
-STATUS_PARTIAL = "partial"
-STATUS_NO_POINTS = "no-points"
-STATUS_INTERRUPTED = "interrupted"
-STATUS_FAILED = "failed"
-STATUS_DRYRUN = "dryrun"
+STATUS_COMPLETED = 'completed'
+STATUS_PARTIAL = 'partial'
+STATUS_NO_POINTS = 'no-points'
+STATUS_INTERRUPTED = 'interrupted'
+STATUS_FAILED = 'failed'
+STATUS_DRYRUN = 'dryrun'
 
 
 @dataclass(slots=True)
@@ -29,14 +29,14 @@ class QuotaStats:
 
     @property
     def label(self) -> str:
-        return f"{self.earned}/{self.maximum}" if self.known else "unknown"
+        return f'{self.earned}/{self.maximum}' if self.known else 'unknown'
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "earned": self.earned,
-            "maximum": self.maximum,
-            "remaining": self.remaining,
-            "known": self.known,
+            'earned': self.earned,
+            'maximum': self.maximum,
+            'remaining': self.remaining,
+            'known': self.known,
         }
 
 
@@ -45,7 +45,7 @@ class AccountRun:
     """Outcome of one profile/account run."""
 
     profile: str
-    backend: str = ""
+    backend: str = ''
     desktop: QuotaStats = field(default_factory=QuotaStats)
     mobile: QuotaStats = field(default_factory=QuotaStats)
     points_before: int | None = None
@@ -66,22 +66,22 @@ class AccountRun:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "profile": self.profile,
-            "backend": self.backend,
-            "desktop": self.desktop.to_dict(),
-            "mobile": self.mobile.to_dict(),
-            "points_before": self.points_before,
-            "points_after": self.points_after,
-            "points_gained": self.points_gained,
-            "searches": self.searches,
-            "earn": {
-                "completed": list(self.earn_completed),
-                "skipped": list(self.earn_skipped),
-                "failed": list(self.earn_failed),
+            'profile': self.profile,
+            'backend': self.backend,
+            'desktop': self.desktop.to_dict(),
+            'mobile': self.mobile.to_dict(),
+            'points_before': self.points_before,
+            'points_after': self.points_after,
+            'points_gained': self.points_gained,
+            'searches': self.searches,
+            'earn': {
+                'completed': list(self.earn_completed),
+                'skipped': list(self.earn_skipped),
+                'failed': list(self.earn_failed),
             },
-            "duration_s": round(self.duration_s, 1),
-            "status": self.status,
-            "error": self.error,
+            'duration_s': round(self.duration_s, 1),
+            'status': self.status,
+            'error': self.error,
         }
 
 
@@ -90,10 +90,10 @@ class RunReport:
     """Aggregate of all accounts in one invocation."""
 
     version: str
-    backend: str = ""
+    backend: str = ''
     dryrun: bool = False
     accounts: list[AccountRun] = field(default_factory=list)
-    started_at: str = ""
+    started_at: str = ''
     duration_s: float = 0.0
     status: str = STATUS_COMPLETED
     started_monotonic: float = field(default_factory=time.monotonic, repr=False)
@@ -122,22 +122,18 @@ class RunReport:
         if any(account.status == STATUS_PARTIAL for account in self.accounts):
             return STATUS_PARTIAL
         gained = self.points_gained
-        return (
-            STATUS_NO_POINTS
-            if (gained is not None and gained <= 0)
-            else STATUS_COMPLETED
-        )
+        return STATUS_NO_POINTS if (gained is not None and gained <= 0) else STATUS_COMPLETED
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "version": self.version,
-            "backend": self.backend,
-            "dryrun": self.dryrun,
-            "started_at": self.started_at,
-            "duration_s": round(self.duration_s, 1),
-            "points_gained": self.points_gained,
-            "status": self.status,
-            "accounts": [account.to_dict() for account in self.accounts],
+            'version': self.version,
+            'backend': self.backend,
+            'dryrun': self.dryrun,
+            'started_at': self.started_at,
+            'duration_s': round(self.duration_s, 1),
+            'points_gained': self.points_gained,
+            'status': self.status,
+            'accounts': [account.to_dict() for account in self.accounts],
         }
 
     def render_json(self) -> str:
@@ -148,8 +144,8 @@ def _format_duration(seconds: float) -> str:
     total = round(seconds)
     minutes, secs = divmod(total, 60)
     if minutes:
-        return f"{minutes}m {secs:02d}s"
-    return f"{secs}s"
+        return f'{minutes}m {secs:02d}s'
+    return f'{secs}s'
 
 
 def render_text_summary(report: RunReport) -> str:
@@ -157,38 +153,38 @@ def render_text_summary(report: RunReport) -> str:
     lines: list[str] = []
     header = f'bing-rewards v{report.version} · backend={report.backend or "unknown"}'
     if report.dryrun:
-        header += " · dryrun"
+        header += ' · dryrun'
     lines.append(header)
 
     for account in report.accounts:
         gained = account.points_gained
-        gained_text = f"+{gained}" if gained is not None else "unknown"
+        gained_text = f'+{gained}' if gained is not None else 'unknown'
         balance = (
-            f"{account.points_before} -> {account.points_after}"
+            f'{account.points_before} -> {account.points_after}'
             if account.points_before is not None and account.points_after is not None
-            else "unknown"
+            else 'unknown'
         )
         lines.append(
             f'  profile "{account.profile}" [{account.status}]'
-            f" · desktop {account.desktop.label}"
-            f" · mobile {account.mobile.label}"
-            f" · points {gained_text} ({balance})"
-            f" · searches {account.searches}"
-            f" · {_format_duration(account.duration_s)}"
+            f' · desktop {account.desktop.label}'
+            f' · mobile {account.mobile.label}'
+            f' · points {gained_text} ({balance})'
+            f' · searches {account.searches}'
+            f' · {_format_duration(account.duration_s)}'
         )
         if account.earn_completed or account.earn_skipped or account.earn_failed:
             lines.append(
-                f"    earn: {len(account.earn_completed)} completed,"
-                f" {len(account.earn_skipped)} skipped,"
-                f" {len(account.earn_failed)} failed"
+                f'    earn: {len(account.earn_completed)} completed,'
+                f' {len(account.earn_skipped)} skipped,'
+                f' {len(account.earn_failed)} failed'
             )
         if account.error:
-            lines.append(f"    error: {account.error}")
+            lines.append(f'    error: {account.error}')
 
     total_points = report.points_gained
-    total_text = f"+{total_points}" if total_points is not None else "unknown"
+    total_text = f'+{total_points}' if total_points is not None else 'unknown'
     lines.append(
-        f"  total: {total_text} points · {len(report.accounts)} account(s)"
-        f" · {_format_duration(report.duration_s)} · status={report.status}"
+        f'  total: {total_text} points · {len(report.accounts)} account(s)'
+        f' · {_format_duration(report.duration_s)} · status={report.status}'
     )
-    return "\n".join(lines)
+    return '\n'.join(lines)

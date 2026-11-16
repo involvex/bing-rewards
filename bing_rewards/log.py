@@ -14,22 +14,22 @@ import logging
 import sys
 from pathlib import Path
 
-LOGGER_NAME = "bing_rewards"
+LOGGER_NAME = 'bing_rewards'
 
 LOG_LEVELS: dict[str, int] = {
-    "critical": logging.CRITICAL,
-    "error": logging.ERROR,
-    "warning": logging.WARNING,
-    "info": logging.INFO,
-    "debug": logging.DEBUG,
+    'critical': logging.CRITICAL,
+    'error': logging.ERROR,
+    'warning': logging.WARNING,
+    'info': logging.INFO,
+    'debug': logging.DEBUG,
 }
 
-DEFAULT_LOG_LEVEL = "info"
+DEFAULT_LOG_LEVEL = 'info'
 
 
 def get_logger(name: str | None = None) -> logging.Logger:
     """Return the package logger, optionally namespaced with `name`."""
-    return logging.getLogger(f"{LOGGER_NAME}.{name}" if name else LOGGER_NAME)
+    return logging.getLogger(f'{LOGGER_NAME}.{name}' if name else LOGGER_NAME)
 
 
 def normalize_level(level: str | None) -> str:
@@ -53,14 +53,14 @@ def setup_logging(level: str | None = None, log_file: str | None = None) -> None
         handler.close()
 
     stream = logging.StreamHandler(stream=sys.stderr)
-    stream.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    stream.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
     logger.addHandler(stream)
 
     if log_file:
         path = Path(log_file)
         path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(path, encoding="utf-8")
+        file_handler = logging.FileHandler(path, encoding='utf-8')
         file_handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+            logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
         )
         logger.addHandler(file_handler)
